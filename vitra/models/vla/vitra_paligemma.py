@@ -96,6 +96,7 @@ class VITRA_Paligemma(nn.Module):
     def _init_fov_encoder(self):
         from vitra.utils.nn_utils import MLPProjector
         fov_dim = 2 # fov_x, fov_y
+        
         mlp = MLPProjector(fov_dim, self.hidden_size)
         nn.init.normal_(mlp.projector[0].weight, mean=0.0, std=0.02)
         nn.init.normal_(mlp.projector[2].weight, mean=0.0, std=0.02)
@@ -236,15 +237,16 @@ class VITRA_Paligemma(nn.Module):
         else:
             # evaluate mode
             # sample multiple action chunks
-            actions = self.act_model.sample(
-                action_features_repeated,
-                cfg_scale,
-                current_state_repeated,      #[B*sample_times, 1, D]
-                current_state_mask_repeated, #[B*sample_times, 1, D]
-                use_ddim,
-                num_ddim_steps,
-                action_masks_repeated, # ori x_mask
-            )
+            with torch.profiler.record_function("dit_sampling"):
+                actions = self.act_model.sample(
+                    action_features_repeated,
+                    cfg_scale,
+                    current_state_repeated,      #[B*sample_times, 1, D]
+                    current_state_mask_repeated, #[B*sample_times, 1, D]
+                    use_ddim,
+                    num_ddim_steps,
+                    action_masks_repeated, # ori x_mask
+                )
 
             return actions, action_loss
 
@@ -292,7 +294,8 @@ class VITRA_Paligemma(nn.Module):
             num_additional_tokens += 1
 
         if self.use_fov:
-            fov_embeds = self.fov_encoder(fov)
+            with torch.profiler.record_function("fov_encoder"):
+                fov_embeds = self.fov_encoder(fov)
             fov_ids_mask = torch.ones((B, 1), dtype=torch.bool).to(input_ids_mask.device)
 
             embeds_list.append(fov_embeds.unsqueeze(1))
@@ -324,7 +327,8 @@ class VITRA_Paligemma(nn.Module):
         # Merge text and images
         if pixel_values is not None:
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16):
-                image_features = self.model.get_image_features(pixel_values)
+                with torch.profiler.record_function("vision_encoder"):
+                    image_features = self.model.get_image_features(pixel_values)
 
             special_image_mask = (input_ids == self.model.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -359,25 +363,26 @@ class VITRA_Paligemma(nn.Module):
         use_cache: bool = False,
         **kwargs,
     ):
-
-        vlm_inputs, inputs_masks = self.prepare_vlm_input_embeddings(
-                pixel_values,
-                input_ids,
-                attention_mask,
-                current_state_mask,
-                current_state,
-                fov,
-                **kwargs,
-            )
+        with torch.profiler.record_function("vlm_inputs"):
+            vlm_inputs, inputs_masks = self.prepare_vlm_input_embeddings(
+                    pixel_values,
+                    input_ids,
+                    attention_mask,
+                    current_state_mask,
+                    current_state,
+                    fov,
+                    **kwargs,
+                )
 
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16):
-            outputs = self.model.language_model(
-                past_key_values=None,
-                use_cache=use_cache,
-                output_hidden_states=True,
-                num_logits_to_keep=0, # can be modified
-                **vlm_inputs
-            )
+            with torch.profiler.record_function("gemma"):
+                outputs = self.model.language_model(
+                    past_key_values=None,
+                    use_cache=use_cache,
+                    output_hidden_states=True,
+                    num_logits_to_keep=0, # can be modified
+                    **vlm_inputs
+                )
 
         output_hs = outputs.hidden_states[-1]
         return output_hs, inputs_masks
@@ -434,6 +439,7 @@ class VITRA_Paligemma(nn.Module):
         return image
         
 
+    @torch.profiler.record_function("predict_action")
     def predict_action(
         self, 
         image, 
@@ -469,7 +475,8 @@ class VITRA_Paligemma(nn.Module):
             else:
                 raise ValueError(f"Unsupported image shape: {image.shape}")
         prefix = '<image>'
-        model_inputs = self.processor(text=prefix + instruction, images=image, return_tensors="pt").to('cuda')
+        with torch.profiler.record_function("preprocess"):
+            model_inputs = self.processor(text=prefix + instruction, images=image, return_tensors="pt").to('cuda')
         pixel_value = model_inputs['pixel_values']
         input_ids = model_inputs['input_ids']
 
@@ -520,7 +527,8 @@ class VITRA_Paligemma(nn.Module):
             use_ddim = use_ddim,
             num_ddim_steps = num_ddim_steps,
         )
-        action_np = samples.cpu().numpy() * x_mask.cpu().numpy()    # sample_times x T x D
+        with torch.profiler.record_function("to_cpu"):
+            action_np = samples.cpu().numpy() * x_mask.cpu().numpy()    # sample_times x T x D
         return action_np
 
     def _format_loss(self, loss):

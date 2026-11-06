@@ -361,10 +361,12 @@ class DiT(nn.Module):
             state_mask = torch.cat([state_mask, state_mask], dim=0)
             state = state * state_mask
             combined = torch.cat([half, half], dim=0).to(next(self.x_embedder.parameters()).dtype)
-            model_out = self.forward(combined, t, z, state, state_mask)
+            with torch.profiler.record_function("dit_step"):
+                model_out = self.forward(combined, t, z, state, state_mask)
         else:
             combined = torch.cat([half, half], dim=0).to(next(self.x_embedder.parameters()).dtype)
-            model_out = self.forward(combined, t, z)
+            with torch.profiler.record_function("dit_step"):
+                model_out = self.forward(combined, t, z)
 
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
