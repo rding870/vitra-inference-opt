@@ -1,0 +1,64 @@
+Loading config from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/configs/config.json
+Initializing services...
+Found precomputed hand state results: examples/0002.npy. Using the state instead of running hand recon.
+[VLA Process] Loading VLA model...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [01:30<01:30, 90.58s/it]Loading checkpoint shards: 100%|██████████| 2/2 [01:43<00:00, 45.10s/it]Loading checkpoint shards: 100%|██████████| 2/2 [01:43<00:00, 51.93s/it]
+11/07 [07:46:01] INFO     | >> [*] Using separate          vitra_paligemma.py:78
+                          cognition token                                       
+                 INFO     | >> [*] Cognition token id: 10  vitra_paligemma.py:79
+                 INFO     | >> [*] Init cognition token    vitra_paligemma.py:84
+                          with id=10                                            
+Loading model from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B
+Found checkpoint: checkpoints/vitra-vla-3b.pt
+Loading checkpoint from /workspace/.cache/huggingface/hub/models--VITRA-VLA--VITRA-VLA-3B/snapshots/54f9d3299811ddbb74d237432b301917013fee52/checkpoints/vitra-vla-3b.pt
+Checkpoint loaded
+Loading statistics from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/statistics/dataset_statistics.json
+[VLA Process] VLA model ready.
+VLA inference service initialized
+Running VLA inference...
+[VLA Process] Warmup 1/10: 472.7 ms
+[VLA Process] Warmup 2/10: 188.7 ms
+[VLA Process] Warmup 3/10: 194.6 ms
+[VLA Process] Warmup 4/10: 180.9 ms
+[VLA Process] Warmup 5/10: 184.9 ms
+[VLA Process] Warmup 6/10: 194.7 ms
+[VLA Process] Warmup 7/10: 179.7 ms
+[VLA Process] Warmup 8/10: 187.7 ms
+[VLA Process] Warmup 9/10: 192.0 ms
+[VLA Process] Warmup 10/10: 186.2 ms
+STAGE:2026-11-07 07:47:17 5391:5391 ActivityProfilerController.cpp:314] Completed Stage: Warm Up
+STAGE:2026-11-07 07:47:18 5391:5391 ActivityProfilerController.cpp:320] Completed Stage: Collection
+STAGE:2026-11-07 07:47:18 5391:5391 ActivityProfilerController.cpp:324] Completed Stage: Post Processing
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                           dit_sampling         0.00%       0.000us         0.00%       0.000us       0.000us     183.164ms        28.67%     183.164ms     183.164ms             1  
+                                               dit_step         0.00%       0.000us         0.00%       0.000us       0.000us     155.841ms        24.40%     155.841ms      15.584ms            10  
+                                         predict_action         1.53%       4.362ms       100.00%     284.759ms     284.759ms       0.000us         0.00%     101.923ms     101.923ms             1  
+                                         predict_action         0.00%       0.000us         0.00%       0.000us       0.000us      92.695ms        14.51%      92.695ms      92.695ms             1  
+                                           aten::linear         1.91%       5.427ms        15.60%      44.413ms      42.379us       0.000us         0.00%      78.238ms      74.655us          1048  
+                                                  gemma         0.00%       0.000us         0.00%       0.000us       0.000us      69.874ms        10.94%      69.874ms      69.874ms             1  
+                                                  gemma         5.20%      14.804ms        19.10%      54.386ms      54.386ms       0.000us         0.00%      63.980ms      63.980ms             1  
+                                 ampere_sgemm_128x64_tn         0.00%       0.000us         0.00%       0.000us       0.000us      57.806ms         9.05%      57.806ms     242.882us           238  
+                                           aten::matmul         0.50%       1.419ms         3.53%      10.048ms      38.498us       0.000us         0.00%      56.372ms     215.985us           261  
+                                               aten::mm         1.18%       3.363ms         1.91%       5.437ms      29.710us      53.620ms         8.39%      54.771ms     299.295us           183  
+                                            aten::addmm         6.42%      18.292ms         9.61%      27.376ms      31.649us      25.677ms         4.02%      27.795ms      32.133us           865  
+                                           dit_sampling         2.66%       7.583ms        69.66%     198.372ms     198.372ms       0.000us         0.00%      25.470ms      25.470ms             1  
+                                               dit_step        15.16%      43.162ms        54.97%     156.532ms      15.653ms       0.000us         0.00%      24.548ms       2.455ms            10  
+                                             vlm_inputs         0.00%       0.000us         0.00%       0.000us       0.000us      22.319ms         3.49%      22.319ms      22.319ms             1  
+                                         vision_encoder         0.00%       0.000us         0.00%       0.000us       0.000us      19.061ms         2.98%      19.061ms      19.061ms             1  
+                                             vlm_inputs         0.28%     792.000us         7.90%      22.489ms      22.489ms       0.000us         0.00%      12.141ms      12.141ms             1  
+                                         vision_encoder         1.50%       4.266ms         6.76%      19.252ms      19.252ms       0.000us         0.00%      11.709ms      11.709ms             1  
+                        ampere_sgemm_64x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       9.324ms         1.46%       9.324ms      25.337us           368  
+                       ampere_sgemm_128x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       7.623ms         1.19%       7.623ms      31.762us           240  
+                                       cudaLaunchKernel        17.37%      49.456ms        17.37%      49.456ms       6.158us       4.652ms         0.73%       4.652ms       0.579us          8031  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 284.766ms
+Self CUDA time total: 638.775ms
+
+[VLA Process] Saved profiler trace to profiler_traces/warm/predict_0.json
+Skipping visualization. Predicted action shape: (4, 16, 102)
+Shutting down services...
+[VLA Process] Received shutdown signal
+[VLA Process] Cleaned up and exiting
+All services shut down successfully
