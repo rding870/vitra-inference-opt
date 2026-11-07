@@ -3,6 +3,7 @@ import sys
 import cv2
 import math
 import json
+import time
 import torch
 import argparse
 import contextlib
@@ -84,6 +85,7 @@ def main():
     # Advanced Options
     parser.add_argument('--save_state_local', action='store_true', help='Save hand state locally as .npy file')
     parser.add_argument('--profile_dir', type=str, default=None, help='Profile VLA inference (CPU and CUDA) and save Chrome traces to this directory')
+    parser.add_argument('--profile_warmup', type=int, default=10, help='Unprofiled predictions to run before the first profiled one, so traces show warm latency (only used with --profile_dir)')
     parser.add_argument('--skip_visualization', action='store_true', help='Exit after VLA inference without rendering a video (MANO model files not required)')
 
     # === Environment Configuration ===
@@ -148,7 +150,7 @@ def main():
 
 
     # Start VLA service (normalizer and model are loaded inside the service)
-    vla_service = VLAInferenceService(configs, profile_dir=args.profile_dir)
+    vla_service = VLAInferenceService(configs, profile_dir=args.profile_dir, profile_warmup=args.profile_warmup)
     
     try:
         # Visualization setup
@@ -489,11 +491,12 @@ def _hand_reconstruction_worker(args_dict, task_queue, result_queue):
         print("[HandRecon Process] Cleaned up and exiting")
 
 
-def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=None):
+def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=None, profile_warmup=0):
     """
     Persistent worker for VLA model inference that runs in a separate process.
     Keeps model loaded and processes multiple requests until shutdown signal.
-    If profile_dir is set, each prediction is profiled and saved as a Chrome trace.
+    If profile_dir is set, each prediction is profiled and saved as a Chrome trace, after
+    profile_warmup unprofiled predictions on the first request's inputs.
     """
     from vitra.models import load_model
     from vitra.utils.data_utils import load_normalizer
@@ -565,6 +568,26 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
                     unified_state_mask = unified_state_mask.unsqueeze(0)
                     unified_action_mask = unified_action_mask.unsqueeze(0)
                     
+                    predict_kwargs = dict(
+                        image=image,
+                        instruction=instruction,
+                        current_state=unified_state,
+                        current_state_mask=unified_state_mask,
+                        action_mask_torch=unified_action_mask,
+                        num_ddim_steps=num_ddim_steps,
+                        cfg_scale=cfg_scale,
+                        fov=fov,
+                        sample_times=sample_times,
+                    )
+
+                    # Warm up once, so the first trace excludes one-time startup costs
+                    if profile_dir is not None and num_profiled == 0:
+                        for i in range(profile_warmup):
+                            warmup_start = time.perf_counter()
+                            model.predict_action(**predict_kwargs)
+                            warmup_ms = (time.perf_counter() - warmup_start) * 1000
+                            print(f"[VLA Process] Warmup {i + 1}/{profile_warmup}: {warmup_ms:.1f} ms")
+
                     # Run inference
                     profiler_context = contextlib.nullcontext()
                     if profile_dir is not None:
@@ -576,17 +599,7 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
                         )
 
                     with profiler_context as prof:
-                        norm_action = model.predict_action(
-                            image=image,
-                            instruction=instruction,
-                            current_state=unified_state,
-                            current_state_mask=unified_state_mask,
-                            action_mask_torch=unified_action_mask,
-                            num_ddim_steps=num_ddim_steps,
-                            cfg_scale=cfg_scale,
-                            fov=fov,
-                            sample_times=sample_times,
-                        )
+                        norm_action = model.predict_action(**predict_kwargs)
 
                     # Export before returning the result, since shutdown() kills slow workers
                     if prof is not None:
@@ -695,7 +708,7 @@ class HandReconstructionService:
 class VLAInferenceService:
     """Service wrapper for persistent VLA inference process"""
     
-    def __init__(self, configs, profile_dir=None):
+    def __init__(self, configs, profile_dir=None, profile_warmup=0):
         self.ctx = mp.get_context('spawn')
         self.task_queue = self.ctx.Queue()
         self.result_queue = self.ctx.Queue()
@@ -703,7 +716,7 @@ class VLAInferenceService:
         # Start persistent process
         self.process = self.ctx.Process(
             target=_vla_inference_worker,
-            args=(configs, self.task_queue, self.result_queue, profile_dir)
+            args=(configs, self.task_queue, self.result_queue, profile_dir, profile_warmup)
         )
         self.process.start()
         
