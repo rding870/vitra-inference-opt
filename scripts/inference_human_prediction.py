@@ -84,6 +84,7 @@ def main():
     # Advanced Options
     parser.add_argument('--save_state_local', action='store_true', help='Save hand state locally as .npy file')
     parser.add_argument('--profile_dir', type=str, default=None, help='Profile VLA inference (CPU and CUDA) and save Chrome traces to this directory')
+    parser.add_argument('--skip_visualization', action='store_true', help='Exit after VLA inference without rendering a video (MANO model files not required)')
 
     # === Environment Configuration ===
     # Disable tokenizers parallelism to avoid deadlocks in multi-process data loading
@@ -149,12 +150,14 @@ def main():
     # Start VLA service (normalizer and model are loaded inside the service)
     vla_service = VLAInferenceService(configs, profile_dir=args.profile_dir)
     
-    # Visualization setup
-    hand_config = HandConfig(args)
-    hand_config.FPS = args.fps
-    visualizer = HandVisualizer(hand_config, render_gradual_traj=False)
-
     try:
+        # Visualization setup
+        if not args.skip_visualization:
+            hand_config = HandConfig(args)
+            hand_config.FPS = args.fps
+            visualizer = HandVisualizer(hand_config, render_gradual_traj=False)
+
+
         if hand_data is None:
             # Run hand reconstruction using service
             print("Running hand reconstruction...")
@@ -237,7 +240,11 @@ def main():
             cfg_scale=5.0,
             sample_times=sample_times,
         )
-        
+
+        if args.skip_visualization:
+            print(f"Skipping visualization. Predicted action shape: {unnorm_action.shape}")
+            return
+
         fx_exo = intrinsics[0, 0]
         fy_exo = intrinsics[1, 1]
         renderer = Renderer(w, h, (fx_exo, fy_exo), 'cuda')
