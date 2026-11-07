@@ -5,6 +5,7 @@ import math
 import json
 import torch
 import argparse
+import contextlib
 import numpy as np
 from PIL import Image
 from PIL import ImageOps
@@ -82,6 +83,7 @@ def main():
     
     # Advanced Options
     parser.add_argument('--save_state_local', action='store_true', help='Save hand state locally as .npy file')
+    parser.add_argument('--profile_dir', type=str, default=None, help='Profile VLA inference (CPU and CUDA) and save Chrome traces to this directory')
 
     # === Environment Configuration ===
     # Disable tokenizers parallelism to avoid deadlocks in multi-process data loading
@@ -145,7 +147,7 @@ def main():
 
 
     # Start VLA service (normalizer and model are loaded inside the service)
-    vla_service = VLAInferenceService(configs)
+    vla_service = VLAInferenceService(configs, profile_dir=args.profile_dir)
     
     # Visualization setup
     hand_config = HandConfig(args)
@@ -480,10 +482,11 @@ def _hand_reconstruction_worker(args_dict, task_queue, result_queue):
         print("[HandRecon Process] Cleaned up and exiting")
 
 
-def _vla_inference_worker(configs_dict, task_queue, result_queue):
+def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=None):
     """
     Persistent worker for VLA model inference that runs in a separate process.
     Keeps model loaded and processes multiple requests until shutdown signal.
+    If profile_dir is set, each prediction is profiled and saved as a Chrome trace.
     """
     from vitra.models import load_model
     from vitra.utils.data_utils import load_normalizer
@@ -492,8 +495,12 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue):
     
     model = None
     normalizer = None
-    
+    num_profiled = 0
+
     try:
+        if profile_dir is not None:
+            os.makedirs(profile_dir, exist_ok=True)
+
         # Load model and normalizer once
         print("[VLA Process] Loading VLA model...")
         model = load_model(configs_dict).cuda()
@@ -552,18 +559,36 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue):
                     unified_action_mask = unified_action_mask.unsqueeze(0)
                     
                     # Run inference
-                    norm_action = model.predict_action(
-                        image=image,
-                        instruction=instruction,
-                        current_state=unified_state,
-                        current_state_mask=unified_state_mask,
-                        action_mask_torch=unified_action_mask,
-                        num_ddim_steps=num_ddim_steps,
-                        cfg_scale=cfg_scale,
-                        fov=fov,
-                        sample_times=sample_times,
-                    )
-                    
+                    profiler_context = contextlib.nullcontext()
+                    if profile_dir is not None:
+                        profiler_context = torch.profiler.profile(
+                            activities=[
+                                torch.profiler.ProfilerActivity.CPU,
+                                torch.profiler.ProfilerActivity.CUDA,
+                            ],
+                        )
+
+                    with profiler_context as prof:
+                        norm_action = model.predict_action(
+                            image=image,
+                            instruction=instruction,
+                            current_state=unified_state,
+                            current_state_mask=unified_state_mask,
+                            action_mask_torch=unified_action_mask,
+                            num_ddim_steps=num_ddim_steps,
+                            cfg_scale=cfg_scale,
+                            fov=fov,
+                            sample_times=sample_times,
+                        )
+
+                    # Export before returning the result, since shutdown() kills slow workers
+                    if prof is not None:
+                        trace_path = os.path.join(profile_dir, f"predict_{num_profiled}.json")
+                        prof.export_chrome_trace(trace_path)
+                        num_profiled += 1
+                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+                        print(f"[VLA Process] Saved profiler trace to {trace_path}")
+
                     # Extract and denormalize action
                     norm_action = norm_action[:, :, :102]
                     unnorm_action = normalizer.unnormalize_action(norm_action)
@@ -663,15 +688,15 @@ class HandReconstructionService:
 class VLAInferenceService:
     """Service wrapper for persistent VLA inference process"""
     
-    def __init__(self, configs):
+    def __init__(self, configs, profile_dir=None):
         self.ctx = mp.get_context('spawn')
         self.task_queue = self.ctx.Queue()
         self.result_queue = self.ctx.Queue()
-        
+
         # Start persistent process
         self.process = self.ctx.Process(
             target=_vla_inference_worker,
-            args=(configs, self.task_queue, self.result_queue)
+            args=(configs, self.task_queue, self.result_queue, profile_dir)
         )
         self.process.start()
         
