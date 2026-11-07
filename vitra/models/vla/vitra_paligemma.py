@@ -136,20 +136,21 @@ class VITRA_Paligemma(nn.Module):
         model = self.model
         model.config.use_cache = False
 
-        if self.train_setup_configs.get("freeze_option", "full_finetune") == "full_finetune":
+        freeze_option = self.train_setup_configs.get("freeze_option", "freeze_vision_encoder")
+        if freeze_option == "full_finetune":
             model.requires_grad_(True)
             self.vision_tower.requires_grad_(True)
             self.word_embedding.requires_grad_(True)
-
-        if self.train_setup_configs.get("freeze_option", "only_head_and_token") == "only_head_and_token":
+        elif freeze_option == "only_head_and_token":
             model.requires_grad_(False)
             self.vision_tower.requires_grad_(False)
             self.word_embedding.requires_grad_(False)
-
-        if self.train_setup_configs.get("freeze_option", "freeze_vision_encoder") == "freeze_vision_encoder":
+        elif freeze_option == "freeze_vision_encoder":
             model.requires_grad_(True)
             self.vision_tower.requires_grad_(False)
             self.word_embedding.requires_grad_(True)
+        else:
+            raise ValueError(f"Unknown freeze_option: {freeze_option!r}")
 
         if self.act_model is not None:
             self.act_model.requires_grad_(True)
