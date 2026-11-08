@@ -212,6 +212,7 @@ class VITRA_Paligemma(nn.Module):
         model_dtype = next(self.act_model.net.parameters()).dtype
         action_features = action_features.to(model_dtype)
         
+        # creating batches
         action_features_repeated = action_features.unsqueeze(0).repeat(repeated_diffusion_steps, 1, 1, 1)
         action_masks_repeated = action_masks.unsqueeze(0).repeat(repeated_diffusion_steps, 1, 1, 1)
 
@@ -268,14 +269,17 @@ class VITRA_Paligemma(nn.Module):
         fov: Optional[torch.FloatTensor] = None,
         **kwargs
     ):
+        # encode language instruction
         B = input_ids.shape[0]
         word_embeds = self.model.get_input_embeddings()(input_ids)
         input_ids_mask = attention_mask 
 
+        # create cognition token which is just a list of ones in the same dimensions as how many batches
         cog_ids = torch.ones_like(input_ids[:, 0:1]) * self.cognition_token_id # [B, 1]
         cog_embeds = self.model.get_input_embeddings()(cog_ids)
-        cog_ids_mask = torch.ones_like(cog_ids, dtype=torch.bool)
+        cog_ids_mask = torch.ones_like(cog_ids, dtype=torch.bool) # [B, 1, D]
 
+    
         if hasattr(self, 'cognition_token') and self.cognition_token is not None:
             assert self.cognition_token.shape[0] == cog_embeds.shape[-1], f"cognition token shape {self.cognition_token.shape} does not match cog embeds shape {cog_embeds.shape}"
             cog_embeds = self.cognition_token.unsqueeze(0).unsqueeze(0).expand(B, -1, -1) 
@@ -316,6 +320,9 @@ class VITRA_Paligemma(nn.Module):
         # In practice, the embedding passed to the LLM will be replaced with the actual FOV or states (if any) embedding.
         additional_tokens = torch.full((B, num_additional_tokens), self.cognition_token_id, dtype=input_ids.dtype, device=input_ids.device)
 
+        # Rearranges the sequence according to the padding mask.
+        # Before: [Text, Text, PAD, PAD, Cognition]
+        # After:  [PAD, PAD, Text, Text, Cognition]
         inputs_embeds, attention_mask = move_masked_to_left(inputs_embeds, inputs_masks)
         input_ids = torch.cat([input_ids, additional_tokens], dim=1)
         input_ids, inputs_masks = move_masked_to_left_ids(input_ids, inputs_masks)
