@@ -491,6 +491,40 @@ def _hand_reconstruction_worker(args_dict, task_queue, result_queue):
         print("[HandRecon Process] Cleaned up and exiting")
 
 
+def _timed_predict(model, predict_kwargs):
+    """Run one prediction and return it with its wall-clock latency in milliseconds."""
+    # predict_action copies its result to the CPU, which already waits for the GPU.
+    # The explicit syncs keep the timing right if that ever changes.
+    torch.cuda.synchronize()
+    start = time.perf_counter()
+    output = model.predict_action(**predict_kwargs)
+    torch.cuda.synchronize()
+    return output, (time.perf_counter() - start) * 1000
+
+
+def _print_profile_summary(prof, wall_ms):
+    """
+    Print PyTorch's profiler table with each GPU kernel counted once.
+
+    For every record_function range, the profiler also records a GPU-side span with the
+    same name, running from the range's first kernel to its last. torch 2.3 adds those
+    spans to "Self CUDA time total" on top of the kernels inside them, so nested ranges
+    count the same GPU time several times, idle gaps included. Drop them from the table.
+    """
+    stage_names = {
+        e.name for e in prof.events()
+        if e.device_type == torch.autograd.DeviceType.CPU
+        and e.scope == torch.profiler.RecordScope.USER_SCOPE.value
+    }
+    averages = prof.key_averages()
+    averages[:] = [
+        a for a in averages
+        if not (a.device_type == torch.autograd.DeviceType.CUDA and a.key in stage_names)
+    ]
+    print(f"[VLA Process] Profiled call: {wall_ms:.1f} ms wall-clock, slower than the warmup calls because of profiler overhead")
+    print(averages.table(sort_by="self_cuda_time_total", row_limit=20))
+
+
 def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=None, profile_warmup=0):
     """
     Persistent worker for VLA model inference that runs in a separate process.
@@ -583,9 +617,7 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
                     # Warm up once, so the first trace excludes one-time startup costs
                     if profile_dir is not None and num_profiled == 0:
                         for i in range(profile_warmup):
-                            warmup_start = time.perf_counter()
-                            model.predict_action(**predict_kwargs)
-                            warmup_ms = (time.perf_counter() - warmup_start) * 1000
+                            _, warmup_ms = _timed_predict(model, predict_kwargs)
                             print(f"[VLA Process] Warmup {i + 1}/{profile_warmup}: {warmup_ms:.1f} ms")
 
                     # Run inference
@@ -599,14 +631,14 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
                         )
 
                     with profiler_context as prof:
-                        norm_action = model.predict_action(**predict_kwargs)
+                        norm_action, predict_ms = _timed_predict(model, predict_kwargs)
 
                     # Export before returning the result, since shutdown() kills slow workers
                     if prof is not None:
                         trace_path = os.path.join(profile_dir, f"predict_{num_profiled}.json")
                         prof.export_chrome_trace(trace_path)
                         num_profiled += 1
-                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+                        _print_profile_summary(prof, predict_ms)
                         print(f"[VLA Process] Saved profiler trace to {trace_path}")
 
                     # Extract and denormalize action
