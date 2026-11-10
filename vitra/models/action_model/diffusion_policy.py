@@ -1,5 +1,6 @@
 from vitra.models.action_model.dit import DiT
 from vitra.models.action_model import create_diffusion
+from vitra.models.action_model.cuda_graph import CUDAGraphedStep
 from . import gaussian_diffusion as gd
 from vitra.datasets.dataset_utils import ActionFeature
 import torch
@@ -45,6 +46,7 @@ class DiffusionPolicy(nn.Module):
                                         ) 
         #self.diffusion = create_diffusion(timestep_respacing="", noise_schedule = 'linear', diffusion_steps=100, sigma_small=True, learn_sigma = False)
         self.ddim_diffusion = None
+        self.graphed_cfg_step = None
         if self.diffusion.model_var_type in [gd.ModelVarType.LEARNED, gd.ModelVarType.LEARNED_RANGE]:
             learn_sigma = True
         else:
@@ -154,7 +156,9 @@ class DiffusionPolicy(nn.Module):
                 )
             else:
                 model_kwargs = dict(z=z, x_mask=x_mask, cfg_scale=cfg_scale)
-            sample_fn = self.net.forward_with_cfg
+            if self.graphed_cfg_step is None:
+                self.graphed_cfg_step = CUDAGraphedStep(self.net.forward_with_cfg)
+            sample_fn = self.graphed_cfg_step
         else:
             if self.use_state == 'DiT':
                 model_kwargs = dict(z=z, x_mask=x_mask, state=current_state, state_mask=current_state_mask)

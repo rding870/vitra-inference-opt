@@ -447,6 +447,7 @@ class VITRA_Paligemma(nn.Module):
         return image
         
 
+    @torch.no_grad()
     @torch.profiler.record_function("predict_action")
     def predict_action(
         self, 
