@@ -185,8 +185,6 @@ weights/hawor/checkpoints
 weights/hawor/external
 weights/external/detector.pt
 
-#
-benchmark*/
 # configs/
 
 .DS_Store
