@@ -135,8 +135,13 @@ def main():
     parser.add_argument('--warmup', type=int, default=10, help='Initial predictions to exclude from the statistics')
     parser.add_argument('--iterations', type=int, default=200, help='Predictions to measure')
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
+    parser.add_argument('--use_bf16', action='store_true', help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
+    parser.add_argument('--bf16_weights', action='store_true', help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
+    parser.add_argument('--no_cuda_graphs', action='store_true', help='Run the DiT sampling steps eagerly instead of through a CUDA graph')
     parser.add_argument('--output', type=str, required=True, help='Path to save the JSON results')
     args = parser.parse_args()
+    if args.bf16_weights and not args.use_bf16:
+        parser.error('--bf16_weights requires --use_bf16')
 
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     torch.manual_seed(args.seed)
@@ -145,6 +150,11 @@ def main():
     load_start = time.perf_counter()
     model = load_model(configs).cuda()
     model.eval()
+    model.use_bf16 = args.use_bf16
+    model.set_bf16_weights(args.bf16_weights)
+    if args.no_cuda_graphs:
+        # predict_action only builds the graphed step when this is None, so this keeps sampling eager
+        model.act_model.graphed_cfg_step = model.act_model.net.forward_with_cfg
     load_s = time.perf_counter() - load_start
     normalizer = load_normalizer(configs)
 
@@ -181,6 +191,8 @@ def main():
             'gpu': torch.cuda.get_device_name(),
             'param_dtypes': dict(collections.Counter(str(p.dtype) for p in model.parameters())),
             'use_bf16': model.use_bf16,
+            'bf16_weights': args.bf16_weights,
+            'cuda_graphs': not args.no_cuda_graphs,
             'grad_enabled': torch.is_grad_enabled(),
             'params_requiring_grad': sum(p.requires_grad for p in model.parameters()),
             'batch_size': 1,

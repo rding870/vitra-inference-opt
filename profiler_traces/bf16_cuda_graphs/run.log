@@ -1,0 +1,63 @@
+Loading config from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/configs/config.json
+Initializing services...
+Found precomputed hand state results: examples/0002.npy. Using the state instead of running hand recon.
+[VLA Process] Loading VLA model...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [02:10<02:10, 130.38s/it]Loading checkpoint shards: 100%|██████████| 2/2 [02:23<00:00, 61.26s/it] Loading checkpoint shards: 100%|██████████| 2/2 [02:23<00:00, 71.63s/it]
+11/10 [06:04:15] INFO     | >> [*] Using separate          vitra_paligemma.py:78
+                          cognition token                                       
+                 INFO     | >> [*] Cognition token id: 10  vitra_paligemma.py:79
+                 INFO     | >> [*] Init cognition token    vitra_paligemma.py:84
+                          with id=10                                            
+Loading checkpoint from /tmp/claude-0/-workspace/90bd25a4-2b0c-45c8-9123-dc58f1821f80/scratchpad/hf_hub/models--VITRA-VLA--VITRA-VLA-3B/snapshots/54f9d3299811ddbb74d237432b301917013fee52/checkpoints/vitra-vla-3b.pt
+Checkpoint loaded
+Loading statistics from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/statistics/dataset_statistics.json
+[VLA Process] VLA model ready (use_bf16=True, bf16_weights=True).
+VLA inference service initialized
+Running VLA inference...
+[VLA Process] Warmup 1/10: 654.2 ms
+[VLA Process] Warmup 2/10: 68.9 ms
+[VLA Process] Warmup 3/10: 67.3 ms
+[VLA Process] Warmup 4/10: 67.2 ms
+[VLA Process] Warmup 5/10: 73.6 ms
+[VLA Process] Warmup 6/10: 67.4 ms
+[VLA Process] Warmup 7/10: 67.2 ms
+[VLA Process] Warmup 8/10: 68.2 ms
+[VLA Process] Warmup 9/10: 67.0 ms
+[VLA Process] Warmup 10/10: 71.7 ms
+STAGE:2026-11-10 06:05:27 25400:25400 ActivityProfilerController.cpp:314] Completed Stage: Warm Up
+STAGE:2026-11-10 06:05:27 25400:25400 ActivityProfilerController.cpp:320] Completed Stage: Collection
+STAGE:2026-11-10 06:05:27 25400:25400 ActivityProfilerController.cpp:324] Completed Stage: Post Processing
+[VLA Process] Profiled call: 102.5 ms wall-clock, slower than the warmup calls because of profiler overhead
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                               aten::mm         2.19%       2.240ms         3.19%       3.268ms      17.858us      10.194ms        27.11%      10.227ms      55.885us           183  
+                       ampere_sgemm_128x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       6.062ms        16.12%       6.062ms      25.258us           240  
+                        ampere_sgemm_64x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       5.288ms        14.06%       5.288ms      20.338us           260  
+ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_...         0.00%       0.000us         0.00%       0.000us       0.000us       4.574ms        12.16%       4.574ms      87.962us            52  
+                        ampere_sgemm_32x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       3.031ms         8.06%       3.031ms      17.829us           170  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       2.478ms         6.59%       2.478ms      47.654us            52  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       1.982ms         5.27%       1.982ms       1.982ms             1  
+                                            aten::addmm         2.03%       2.079ms         2.71%       2.771ms      16.794us       1.596ms         4.24%       1.900ms      11.515us           165  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us       1.410ms         3.75%       1.410ms       1.175us          1200  
+                                            aten::copy_         3.48%       3.559ms        27.23%      27.882ms      29.630us       1.398ms         3.72%       1.624ms       1.726us           941  
+                                              aten::mul         2.78%       2.850ms         4.36%       4.460ms       8.832us       1.103ms         2.93%       1.128ms       2.234us           505  
+fmha_cutlassF_f32_aligned_64x64_rf_sm80(PyTorchMemEf...         0.00%       0.000us         0.00%       0.000us       0.000us     963.000us         2.56%     963.000us       8.025us           120  
+                                       cudaLaunchKernel        12.09%      12.381ms        12.09%      12.381ms       3.455us     934.000us         2.48%     936.000us       0.261us          3584  
+                                              aten::add         3.16%       3.233ms         4.85%       4.965ms       9.246us     807.000us         2.15%     945.000us       1.760us           537  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     679.000us         1.81%     679.000us       1.820us           373  
+void at::native::(anonymous namespace)::vectorized_l...         0.00%       0.000us         0.00%       0.000us       0.000us     670.000us         1.78%     670.000us       2.197us           305  
+ampere_bf16_s16816gemm_bf16_64x64_ldg8_relu_f2f_stag...         0.00%       0.000us         0.00%       0.000us       0.000us     651.000us         1.73%     651.000us       6.028us           108  
+                                              aten::bmm         1.16%       1.191ms         1.53%       1.563ms      20.038us     520.000us         1.38%     530.000us       6.795us            78  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     518.000us         1.38%     518.000us      19.185us            27  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     492.000us         1.31%     492.000us       9.462us            52  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 102.384ms
+Self CUDA time total: 37.602ms
+
+[VLA Process] Saved profiler trace to profiler_traces/bf16_cuda_graphs/predict_0.json
+Skipping visualization. Predicted action shape: (4, 16, 102)
+Shutting down services...
+[VLA Process] Received shutdown signal
+[VLA Process] Cleaned up and exiting
+All services shut down successfully
