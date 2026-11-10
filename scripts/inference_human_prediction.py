@@ -27,8 +27,6 @@ from vitra.datasets.dataset_utils import (
 repo_root = Path(__file__).parent.parent  # VITRA/
 sys.path.insert(0, str(repo_root))
 
-from visualization.visualize_core import HandVisualizer, normalize_camera_intrinsics, save_to_video, Renderer, process_single_hand_labels
-from visualization.visualize_core import Config as HandConfig
 
 def main():
     """
@@ -86,6 +84,8 @@ def main():
     parser.add_argument('--save_state_local', action='store_true', help='Save hand state locally as .npy file')
     parser.add_argument('--profile_dir', type=str, default=None, help='Profile VLA inference (CPU and CUDA) and save Chrome traces to this directory')
     parser.add_argument('--profile_warmup', type=int, default=10, help='Unprofiled predictions to run before the first profiled one, so traces show warm latency (only used with --profile_dir)')
+    parser.add_argument('--use_bf16', action='store_true', help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
+    parser.add_argument('--bf16_weights', action='store_true', help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
     parser.add_argument('--skip_visualization', action='store_true', help='Exit after VLA inference without rendering a video (MANO model files not required)')
 
     # === Environment Configuration ===
@@ -106,6 +106,10 @@ def main():
         configs['model_load_path'] = args.model_path
     if args.statistics_path is not None:
         configs['statistics_path'] = args.statistics_path
+    if args.bf16_weights and not args.use_bf16:
+        parser.error('--bf16_weights requires --use_bf16')
+    configs['use_bf16'] = args.use_bf16
+    configs['bf16_weights'] = args.bf16_weights
 
     # Check if a precomputed hand reconstruction .npy (same stem as image) exists.
     image_path_obj = Path(args.image_path)
@@ -155,6 +159,9 @@ def main():
     try:
         # Visualization setup
         if not args.skip_visualization:
+            # Imported here because it needs pytorch3d, which inference alone does not
+            from visualization.visualize_core import HandVisualizer, save_to_video, Renderer, process_single_hand_labels
+            from visualization.visualize_core import Config as HandConfig
             hand_config = HandConfig(args)
             hand_config.FPS = args.fps
             visualizer = HandVisualizer(hand_config, render_gradual_traj=False)
@@ -549,8 +556,10 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
         print("[VLA Process] Loading VLA model...")
         model = load_model(configs_dict).cuda()
         model.eval()
+        model.use_bf16 = configs_dict.get('use_bf16', False)
+        model.set_bf16_weights(configs_dict.get('bf16_weights', False))
         normalizer = load_normalizer(configs_dict)
-        print(f"[VLA Process] VLA model ready.")
+        print(f"[VLA Process] VLA model ready (use_bf16={model.use_bf16}, bf16_weights={configs_dict.get('bf16_weights', False)}).")
         
         # Signal ready
         result_queue.put({'type': 'ready'})

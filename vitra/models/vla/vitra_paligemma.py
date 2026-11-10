@@ -188,6 +188,56 @@ class VITRA_Paligemma(nn.Module):
     def model(self):
         return self.backbone
 
+    @torch.no_grad()
+    def set_bf16_weights(self, enabled=True, keep_fp32=False):
+        """Store the VLM's linear weights in bf16, so bf16 autocast stops re-casting them every call.
+
+        Autocast casts each fp32 linear weight to bf16 on every forward pass. This casts them
+        once instead: the weights and biases of every nn.Linear in the vision encoder, the
+        multimodal projector and Gemma's decoder, plus Gemma's lm_head. fp32 -> bf16 rounding
+        is deterministic, so with use_bf16 on, outputs should match fp32 weights under
+        autocast exactly. Requires use_bf16, since autocast still casts the fp32 activations.
+
+        Left in fp32:
+        - norms, embeddings, the FoV and state encoders, and the DiT
+        - SigLIP's patch-embedding conv: it is the VLM's first parameter, so its dtype is
+          what PaliGemma reports as model.dtype, which sets the attention mask dtype
+        - the token embedding shared with lm_head, which runs outside autocast; lm_head gets
+          its own bf16 copy instead of being converted in place
+
+        keep_fp32=True keeps the fp32 originals (about 6 GB more GPU memory), so that
+        set_bf16_weights(False) can restore them, e.g. to compare precisions in one process.
+        """
+        vlm = self.model
+        lm_head = vlm.language_model.lm_head
+        is_bf16 = getattr(self, '_bf16_weights', False)
+        if enabled == is_bf16:
+            return
+
+        if enabled:
+            originals = {}
+            for module in (vlm.vision_tower, vlm.multi_modal_projector, vlm.language_model.model):
+                for layer in module.modules():
+                    if isinstance(layer, nn.Linear):
+                        for param in (layer.weight, layer.bias):
+                            if param is not None:
+                                originals[param] = param.data
+                                param.data = param.data.to(torch.bfloat16)
+            originals[lm_head] = lm_head.weight
+            lm_head.weight = nn.Parameter(lm_head.weight.to(torch.bfloat16), requires_grad=False)
+            assert vlm.dtype == torch.float32, f"VLM now reports dtype {vlm.dtype}, which would change its attention mask"
+            self._fp32_originals = originals if keep_fp32 else None
+        else:
+            if self._fp32_originals is None:
+                raise RuntimeError("fp32 weights were not kept; call set_bf16_weights(True, keep_fp32=True) to allow switching back")
+            for key, original in self._fp32_originals.items():
+                if key is lm_head:
+                    lm_head.weight = original  # re-tie to the token embedding
+                else:
+                    key.data = original
+            self._fp32_originals = None
+        self._bf16_weights = enabled
+
     def _forward_act_model(
         self,
         vlm_features: torch.Tensor,

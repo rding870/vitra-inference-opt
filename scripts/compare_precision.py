@@ -5,6 +5,8 @@ Loads the model once and switches settings between calls:
   - precision: fp32, or bf16 autocast (model.use_bf16, covering the vision encoder
     and Gemma; the DiT action head stays fp32)
   - DiT sampling: eager, or CUDA graphs
+  - bf16 weights: the VLM's linear weights stored in bf16 (model.set_bf16_weights),
+    so autocast stops re-casting them every call; expected to match bf16 autocast exactly
 Every call reseeds the RNG, so paired calls draw identical diffusion noise.
 
 Each comparison reports two levels of fidelity:
@@ -49,12 +51,13 @@ EXAMPLES = [
     ('./examples/0002.jpg', 'right', 'Left hand: None. Right hand: Pick up the picture of Michael Jackson.'),
 ]
 
-# name: (use_bf16, use_cuda_graphs)
+# name: (use_bf16, use_cuda_graphs, bf16_weights)
 CONFIGS = {
-    'fp32_eager': (False, False),
-    'fp32_graphs': (False, True),
-    'bf16_eager': (True, False),
-    'bf16_graphs': (True, True),
+    'fp32_eager': (False, False, False),
+    'fp32_graphs': (False, True, False),
+    'bf16_eager': (True, False, False),
+    'bf16_graphs': (True, True, False),
+    'bf16w_graphs': (True, True, True),
 }
 
 # name: (config_a, config_b, seed offset for b)
@@ -63,6 +66,8 @@ COMPARISONS = {
     'fp32 graphs vs fp32 eager': ('fp32_graphs', 'fp32_eager', 0),
     'bf16 eager vs fp32 eager': ('bf16_eager', 'fp32_eager', 0),
     'bf16 graphs vs fp32 eager': ('bf16_graphs', 'fp32_eager', 0),
+    'bf16 weights vs bf16 autocast (both graphs)': ('bf16w_graphs', 'bf16_graphs', 0),
+    'bf16 weights graphs vs fp32 eager': ('bf16w_graphs', 'fp32_eager', 0),
     'fp32, different seed (sampling spread)': ('fp32_eager', 'fp32_eager', 1000),
 }
 
@@ -183,8 +188,9 @@ def main():
     graphed_step = CUDAGraphedStep(model.act_model.net.forward_with_cfg)
 
     def set_config(name):
-        use_bf16, use_graphs = CONFIGS[name]
+        use_bf16, use_graphs, bf16_weights = CONFIGS[name]
         model.use_bf16 = use_bf16
+        model.set_bf16_weights(bf16_weights, keep_fp32=True)
         model.act_model.graphed_cfg_step = graphed_step if use_graphs else model.act_model.net.forward_with_cfg
 
     def predict(inputs, instruction, seed):
@@ -258,6 +264,7 @@ def main():
         'num_ddim_steps': args.num_ddim_steps,
         'cfg_scale': args.cfg_scale,
         'bf16_scope': 'autocast for vision encoder and Gemma; DiT action head in fp32',
+        'bf16_weights_scope': 'nn.Linear weights of vision encoder, projector, Gemma decoder and lm_head stored in bf16',
     }
 
     output = Path(args.output)
