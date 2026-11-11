@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from timm.models.vision_transformer import PatchEmbed, Mlp, RmsNorm, Attention
+from timm.models.vision_transformer import Mlp, RmsNorm, Attention
 from torch.nn import functional as F
 
 def modulate(x, shift, scale):
@@ -74,21 +74,18 @@ class TimestepEmbedder(nn.Module):
 class ActionEmbedder(nn.Module):
     def __init__(self, action_size, hidden_size):
         super().__init__()
-        # self.linear = nn.Linear(action_size, hidden_size)
         self.projector = nn.Sequential(
             nn.Linear(action_size, hidden_size, bias=True),
             nn.GELU(),
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
     def forward(self, x):
-        # x = self.linear(x)
         x = self.projector(x)
         return x
 
 class StateEmbedder(nn.Module):
     def __init__(self, state_size, hidden_size):
         super().__init__()
-        # self.linear = nn.Linear(action_size, hidden_size)
         self.projector = nn.Sequential(
             nn.Linear(2*state_size, 4*hidden_size, bias=True),
             nn.GELU(),
@@ -97,7 +94,6 @@ class StateEmbedder(nn.Module):
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
     def forward(self, x):
-        # x = self.linear(x)
         x = self.projector(x)
         return x
 
@@ -127,7 +123,6 @@ class MaskAttention(Attention):
             x = attn @ v
 
         x = x.transpose(1, 2).reshape(B, N, C)
-        # x = self.norm(x)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -138,7 +133,6 @@ class LabelEmbedder(nn.Module):
     """
     def __init__(self, in_size, hidden_size, dropout_prob=0.1, conditions_shape=(1, 1, 2304)):
         super().__init__()
-        use_cfg_embedding = dropout_prob > 0
         self.linear = nn.Linear(in_size, hidden_size)
         self.dropout_prob = dropout_prob
         if dropout_prob > 0:
@@ -174,7 +168,6 @@ class DiTBlock(nn.Module):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = MaskAttention(hidden_size, num_heads=num_heads, qkv_bias=True, qk_norm=True, norm_layer=RmsNorm, **block_kwargs)
-        # self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, qk_norm=True, norm_layer=RmsNorm, **block_kwargs)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
@@ -195,8 +188,6 @@ class DiTBlock(nn.Module):
 
         x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), attn_mask=causal_mask)
         x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
-        # x = x + self.attn(self.norm1(x))
-        # x = x + self.mlp(self.norm2(x))
         return x
 
 
@@ -253,7 +244,6 @@ class DiT(nn.Module):
         self.z_embedder = LabelEmbedder(in_size=token_size, hidden_size=hidden_size, dropout_prob=class_dropout_prob, conditions_shape=(1, 1, token_size))
         if self.use_state is not None and self.use_state == 'DiT':
             self.state_embedder = StateEmbedder(state_size=state_dim, hidden_size=hidden_size)
-        # num_patches = self.x_embedder.num_patches
         # # Will use fixed sin-cos embedding:
 
         # +1 for the conditional token, and 1 for the current action
@@ -265,7 +255,6 @@ class DiT(nn.Module):
             self.positional_embedding = nn.Parameter(
                     scale * torch.randn(future_action_window_size + past_action_window_size + 2, hidden_size))
 
-        #self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
 
         self.blocks = nn.ModuleList([
             DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)
@@ -294,8 +283,6 @@ class DiT(nn.Module):
             nn.init.constant_(self.state_embedder.projector[2].bias, 0)
             nn.init.normal_(self.state_embedder.projector[4].weight, std=0.02)
             nn.init.constant_(self.state_embedder.projector[4].bias, 0)
-        # nn.init.normal_(self.history_embedder.linear.weight, std=0.02)
-        # nn.init.constant_(self.history_embedder.linear.bias, 0)
 
         # Initialize label embedding table:
         if self.class_dropout_prob > 0:
@@ -333,7 +320,6 @@ class DiT(nn.Module):
         x = self.x_embedder(x)                   # (N, T, D)
         t = self.t_embedder(t)                   # (N, D)
         z = self.z_embedder(z, self.training)    # (N, 1, D)
-        # t.unsqueeze(1)
         c = z.squeeze(1) + t                  # (N, 1, D)
         if self.use_state is not None and self.use_state == 'DiT':
             x = torch.cat((z, s, x), dim=1)          # (N, T+2, D)
@@ -352,7 +338,6 @@ class DiT(nn.Module):
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
-        # action_traj = torch.cat([noisy_action, action_mask], dim=2)
         half = half * x_mask
         half = torch.cat([half, x_mask], dim=2)
         if self.use_state == 'DiT' and state is not None:            
@@ -369,67 +354,8 @@ class DiT(nn.Module):
             with torch.profiler.record_function("dit_step"):
                 model_out = self.forward(combined, t, z)
 
-        # For exact reproducibility reasons, we apply classifier-free guidance on only
-        # three channels by default. The standard approach to cfg applies it to all channels.
-        # This can be done by uncommenting the following line and commenting-out the line following that.
-        # eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
         eps, rest = model_out[:, :, :self.in_channels], model_out[:, :, self.in_channels:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=2)
-
-
-#################################################################################
-#                   Sine/Cosine Positional Embedding Functions                  #
-#################################################################################
-# https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
-
-def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=0):
-    """
-    grid_size: int of the grid height and width
-    return:
-    pos_embed: [grid_size*grid_size, embed_dim] or [1+grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
-    """
-    grid_h = np.arange(grid_size, dtype=np.float32)
-    grid_w = np.arange(grid_size, dtype=np.float32)
-    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
-    grid = np.stack(grid, axis=0)
-
-    grid = grid.reshape([2, 1, grid_size, grid_size])
-    pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
-    if cls_token and extra_tokens > 0:
-        pos_embed = np.concatenate([np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0)
-    return pos_embed
-
-
-def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
-    assert embed_dim % 2 == 0
-
-    # use half of dimensions to encode grid_h
-    emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
-    emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (H*W, D/2)
-
-    emb = np.concatenate([emb_h, emb_w], axis=1) # (H*W, D)
-    return emb
-
-
-def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-    """
-    embed_dim: output dimension for each position
-    pos: a list of positions to be encoded: size (M,)
-    out: (M, D)
-    """
-    assert embed_dim % 2 == 0
-    omega = np.arange(embed_dim // 2, dtype=np.float64)
-    omega /= embed_dim / 2.
-    omega = 1. / 10000**omega  # (D/2,)
-
-    pos = pos.reshape(-1)  # (M,)
-    out = np.einsum('m,d->md', pos, omega)  # (M, D/2), outer product
-
-    emb_sin = np.sin(out) # (M, D/2)
-    emb_cos = np.cos(out) # (M, D/2)
-
-    emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
-    return emb

@@ -52,10 +52,6 @@ class VITRA_Paligemma(nn.Module):
         # it drifted most (up to 11.8 mm wrist) for ~1 ms (precision_results/compile_and_vlm_graphs_*)
         self.compile_gemma = False
         self._vlm_steps = {}
-        if self.action_type == 'angle':
-            self.hand_dim = 51
-        elif self.action_type == 'keypoints':
-            self.hand_dim = 69
 
         # Initialize the tokenizer and VLM backbone
         self.tokenizer, self.backbone = self._init_backbone()
@@ -171,20 +167,12 @@ class VITRA_Paligemma(nn.Module):
             self.cognition_token.requires_grad_(True)
 
     @property
-    def image_processor(self):
-        return self.model.processor
-
-    @property
     def hidden_size(self):
         return self.model.config.text_config.hidden_size
 
     @property
     def word_embedding(self):
         return self.model.language_model.model.embed_tokens
-
-    @property
-    def text_tower(self):
-        return self.model.language_model.model
 
     @property
     def vision_tower(self):
@@ -507,12 +495,6 @@ class VITRA_Paligemma(nn.Module):
 
         return loss
 
-    def image_preprocess(self, image: Image, size: Tuple[int, int] = (224, 224)) -> Image:
-        width, height = image.size
-
-        return image
-        
-
     @torch.no_grad()
     @torch.profiler.record_function("predict_action")
     def predict_action(
@@ -569,9 +551,7 @@ class VITRA_Paligemma(nn.Module):
 
         if action_mask_torch is None:
             x_mask = torch.zeros(B, self.chunk_size, self.act_model.in_channels, device=input_ids.device)
-            # x_mask[:, :, :102] = 1.0 # predict dual hand actions
             x_mask[:, :, 51:102] = 1.0 # predict right hand actions
-            # x_mask[:, :, 0:51] = 1.0 # predict left hand actions
         else:
             x_mask = action_mask_torch.to(input_ids.device)
 
@@ -605,18 +585,6 @@ class VITRA_Paligemma(nn.Module):
         with torch.profiler.record_function("to_cpu"):
             action_np = samples.cpu().numpy() * x_mask.cpu().numpy()    # sample_times x T x D
         return action_np
-
-    def _format_loss(self, loss):
-        # for visualization and loss backward in pytorch
-        _loss = 0
-        _keys = list(loss.keys())
-
-        for k in _keys:
-            if "loss" in k:
-                _loss += loss[k]
-
-        loss["loss"] = _loss
-        return loss
 
     @staticmethod
     def _update_loss(loss, new_loss, suffix=None):

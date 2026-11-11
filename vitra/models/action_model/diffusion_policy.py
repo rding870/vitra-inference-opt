@@ -44,7 +44,6 @@ class DiffusionPolicy(nn.Module):
                                         sigma_small=True, 
                                         learn_sigma = False
                                         ) 
-        #self.diffusion = create_diffusion(timestep_respacing="", noise_schedule = 'linear', diffusion_steps=100, sigma_small=True, learn_sigma = False)
         self.ddim_diffusion = None
         self.graphed_cfg_step = None
         self.compile_step = False  # torch.compile the DiT step before CUDA graph capture (fuses small kernels)

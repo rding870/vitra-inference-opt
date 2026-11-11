@@ -71,7 +71,6 @@ def main():
     parser.add_argument('--detector_path', type=str, default='./weights/hawor/external/detector.pt', help='Path to hand detector model')
     parser.add_argument('--moge_model_name', type=str, default='Ruicheng/moge-2-vitl', help='MOGE model name from Hugging Face')
     parser.add_argument('--mano_path', type=str, default='/home/t-qixiuli/repo/VITRA/weights/mano', help='Path to MANO model files')
-    # parser.add_argument('--output_path', type=str, default='./recon_results.npy', help='Path to save reconstruction results')
     
     # Prediction Settings
     parser.add_argument('--use_left', action='store_true', help='Enable left hand prediction')
