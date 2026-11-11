@@ -673,7 +673,8 @@ class GaussianDiffusion:
             indices = tqdm(indices)
 
         for i in indices:
-            t = th.tensor([i] * shape[0], device=device)
+            # Same int64 values as th.tensor([i] * shape[0]), but filled on the GPU (CUDA-graph capturable)
+            t = th.full((shape[0],), i, device=device, dtype=th.long)
             with th.no_grad():
                 out = self.ddim_sample(
                     model,
@@ -867,6 +868,18 @@ class GaussianDiffusion:
         }
 
 
+_device_copies = {}
+
+
+def _on_device(arr, device):
+    """Upload a schedule array to the GPU once and reuse it. Same values as th.from_numpy(arr).to(device),
+    but no host-to-device copy per call, so the DDIM loop can be captured in a CUDA graph."""
+    key = (id(arr), str(device))
+    if key not in _device_copies:
+        _device_copies[key] = (arr, th.from_numpy(arr).to(device))  # keep arr alive so its id is not reused
+    return _device_copies[key][1]
+
+
 def _extract_into_tensor(arr, timesteps, broadcast_shape):
     """
     Extract values from a 1-D numpy array for a batch of indices.
@@ -876,7 +889,7 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
                             dimension equal to the length of timesteps.
     :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
     """
-    res = th.from_numpy(arr).to(device=timesteps.device)[timesteps].float()
+    res = _on_device(arr, timesteps.device)[timesteps].float()
     while len(res.shape) < len(broadcast_shape):
         res = res[..., None]
     return res + th.zeros(broadcast_shape, device=timesteps.device)

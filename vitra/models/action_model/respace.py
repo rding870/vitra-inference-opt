@@ -116,6 +116,9 @@ class SpacedDiffusion(GaussianDiffusion):
         return t
 
 
+_map_tensors = {}
+
+
 class _WrappedModel:
     def __init__(self, model, timestep_map, original_num_steps):
         self.model = model
@@ -124,7 +127,11 @@ class _WrappedModel:
         self.original_num_steps = original_num_steps
 
     def __call__(self, x, ts, **kwargs):
-        map_tensor = th.tensor(self.timestep_map, device=ts.device, dtype=ts.dtype)
+        # Cached GPU copy: no host-to-device copy per call, so the DDIM loop can be captured in a CUDA graph
+        key = (tuple(self.timestep_map), str(ts.device), ts.dtype)
+        if key not in _map_tensors:
+            _map_tensors[key] = th.tensor(self.timestep_map, device=ts.device, dtype=ts.dtype)
+        map_tensor = _map_tensors[key]
         new_ts = map_tensor[ts]
         # if self.rescale_timesteps:
         #     new_ts = new_ts.float() * (1000.0 / self.original_num_steps)
