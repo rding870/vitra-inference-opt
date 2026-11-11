@@ -287,7 +287,7 @@ def main():
         'num_ddim_steps': args.num_ddim_steps,
         'cfg_scale': args.cfg_scale,
         'bf16_scope': 'autocast for vision encoder and Gemma; DiT action head in fp32',
-        'bf16_weights_scope': 'nn.Linear weights of vision encoder, projector, Gemma decoder and lm_head stored in bf16',
+        'bf16_weights_scope': 'nn.Linear weights of vision encoder, projector and Gemma decoder stored in bf16 (lm_head is never run)',
     }
 
     output = Path(args.output)

@@ -200,7 +200,7 @@ class VITRA_Paligemma(nn.Module):
 
         Autocast casts each fp32 linear weight to bf16 on every forward pass. This casts them
         once instead: the weights and biases of every nn.Linear in the vision encoder, the
-        multimodal projector and Gemma's decoder, plus Gemma's lm_head. fp32 -> bf16 rounding
+        multimodal projector and Gemma's decoder. fp32 -> bf16 rounding
         is deterministic, so with use_bf16 on, outputs should match fp32 weights under
         autocast exactly. Requires use_bf16, since autocast still casts the fp32 activations.
 
@@ -208,14 +208,12 @@ class VITRA_Paligemma(nn.Module):
         - norms, embeddings, the FoV and state encoders, and the DiT
         - SigLIP's patch-embedding conv: it is the VLM's first parameter, so its dtype is
           what PaliGemma reports as model.dtype, which sets the attention mask dtype
-        - the token embedding shared with lm_head, which runs outside autocast; lm_head gets
-          its own bf16 copy instead of being converted in place
+        - Gemma's lm_head (tied to the token embedding): it is never run, see _gemma_forward
 
         keep_fp32=True keeps the fp32 originals (about 6 GB more GPU memory), so that
         set_bf16_weights(False) can restore them, e.g. to compare precisions in one process.
         """
         vlm = self.model
-        lm_head = vlm.language_model.lm_head
         is_bf16 = getattr(self, '_bf16_weights', False)
         if enabled == is_bf16:
             return
@@ -229,18 +227,13 @@ class VITRA_Paligemma(nn.Module):
                             if param is not None:
                                 originals[param] = param.data
                                 param.data = param.data.to(torch.bfloat16)
-            originals[lm_head] = lm_head.weight
-            lm_head.weight = nn.Parameter(lm_head.weight.to(torch.bfloat16), requires_grad=False)
             assert vlm.dtype == torch.float32, f"VLM now reports dtype {vlm.dtype}, which would change its attention mask"
             self._fp32_originals = originals if keep_fp32 else None
         else:
             if self._fp32_originals is None:
                 raise RuntimeError("fp32 weights were not kept; call set_bf16_weights(True, keep_fp32=True) to allow switching back")
-            for key, original in self._fp32_originals.items():
-                if key is lm_head:
-                    lm_head.weight = original  # re-tie to the token embedding
-                else:
-                    key.data = original
+            for param, original in self._fp32_originals.items():
+                param.data = original
             self._fp32_originals = None
         self._bf16_weights = enabled
 
@@ -447,15 +440,15 @@ class VITRA_Paligemma(nn.Module):
             return self.model.get_image_features(pixel_values)
 
     def _gemma_forward(self, use_cache=False, **vlm_inputs):
+        # Gemma's decoder without lm_head: only the final hidden states are used, never the vocabulary logits.
+        # last_hidden_state is after the final norm, i.e. the same tensor as hidden_states[-1] of the full model.
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16, cache_enabled=False):
-            outputs = self.model.language_model(
+            outputs = self.model.language_model.model(
                 past_key_values=None,
                 use_cache=use_cache,
-                output_hidden_states=True,
-                num_logits_to_keep=0, # can be modified
                 **vlm_inputs
             )
-        return outputs.hidden_states[-1]
+        return outputs.last_hidden_state
 
     def _run_vlm_part(self, name, fn, *args, **kwargs):
         """Run the vision encoder or Gemma eagerly, or (inference with graph_vlm on) through a CUDA graph,
