@@ -1,4 +1,6 @@
 import os
+# torch 2.3's parallel Inductor compile workers once hung (all idle) compiling the BF16 DiT; compile in-process
+os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
 import sys
 import cv2
 import math
