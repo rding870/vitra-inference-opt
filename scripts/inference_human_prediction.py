@@ -523,13 +523,18 @@ def _print_profile_summary(prof, wall_ms):
         if e.device_type == torch.autograd.DeviceType.CPU
         and e.scope == torch.profiler.RecordScope.USER_SCOPE.value
     }
-    averages = prof.key_averages()
-    averages[:] = [
-        a for a in averages
-        if not (a.device_type == torch.autograd.DeviceType.CUDA and a.key in stage_names)
-    ]
+    def without_stage_spans(averages):
+        averages[:] = [
+            a for a in averages
+            if not (a.device_type == torch.autograd.DeviceType.CUDA and a.key in stage_names)
+        ]
+        return averages
+
     print(f"[VLA Process] Profiled call: {wall_ms:.1f} ms wall-clock, slower than the warmup calls because of profiler overhead")
-    print(averages.table(sort_by="self_cuda_time_total", row_limit=20))
+    print(without_stage_spans(prof.key_averages()).table(sort_by="self_cuda_time_total", row_limit=20))
+    # Same ops split by input shape: tells which layer a GEMM is, and gives bytes moved for bandwidth math
+    by_shape = without_stage_spans(prof.key_averages(group_by_input_shape=True))
+    print(by_shape.table(sort_by="self_cuda_time_total", row_limit=20))
 
 
 def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=None, profile_warmup=0):
@@ -637,6 +642,7 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
                                 torch.profiler.ProfilerActivity.CPU,
                                 torch.profiler.ProfilerActivity.CUDA,
                             ],
+                            record_shapes=True,  # so the shape table can name each GEMM
                         )
 
                     with profiler_context as prof:
