@@ -135,16 +135,15 @@ def main():
     parser.add_argument('--warmup', type=int, default=10, help='Initial predictions to exclude from the statistics')
     parser.add_argument('--iterations', type=int, default=200, help='Predictions to measure')
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
-    parser.add_argument('--use_bf16', action='store_true', help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
-    parser.add_argument('--bf16_weights', action='store_true', help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
+    parser.add_argument('--use_bf16', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
+    parser.add_argument('--bf16_weights', action=argparse.BooleanOptionalAction, default=True, help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
     parser.add_argument('--no_cuda_graphs', action='store_true', help='Run the DiT sampling steps eagerly instead of through a CUDA graph')
-    parser.add_argument('--compile_dit', action='store_true', help='torch.compile the DiT sampling step before CUDA graph capture')
-    parser.add_argument('--graph_vlm', action='store_true', help='Run the vision encoder and Gemma through CUDA graphs')
-    parser.add_argument('--compile_gemma', action='store_true', help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
+    parser.add_argument('--compile_dit', action=argparse.BooleanOptionalAction, default=True, help='torch.compile the DiT sampling step before CUDA graph capture')
+    parser.add_argument('--graph_vlm', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma through CUDA graphs')
+    parser.add_argument('--compile_gemma', action=argparse.BooleanOptionalAction, default=True, help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
     parser.add_argument('--output', type=str, required=True, help='Path to save the JSON results')
     args = parser.parse_args()
-    if args.bf16_weights and not args.use_bf16:
-        parser.error('--bf16_weights requires --use_bf16')
+    args.bf16_weights &= args.use_bf16  # turning off --use_bf16 also turns off its dependent bf16 weights
 
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     torch.manual_seed(args.seed)
@@ -156,8 +155,7 @@ def main():
     model.use_bf16 = args.use_bf16
     model.set_bf16_weights(args.bf16_weights)
     model.act_model.compile_step = args.compile_dit
-    if args.compile_gemma and not args.graph_vlm:
-        parser.error('--compile_gemma requires --graph_vlm')
+    args.compile_gemma &= args.graph_vlm  # Gemma is only compiled together with its CUDA graph
     model.graph_vlm = args.graph_vlm
     model.compile_gemma = args.compile_gemma
     if args.no_cuda_graphs:
