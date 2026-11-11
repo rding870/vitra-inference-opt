@@ -54,7 +54,7 @@ EXAMPLES = [
     ('./examples/0002.jpg', 'right', 'Left hand: None. Right hand: Pick up the picture of Michael Jackson.'),
 ]
 
-# name: (use_bf16, use_cuda_graphs, bf16_weights[, compile_dit, VLM parts in CUDA graphs, VLM parts compiled[, bf16_dit]])
+# name: (use_bf16, use_cuda_graphs, bf16_weights[, compile_dit, VLM parts in CUDA graphs, VLM parts compiled[, bf16_dit[, gpu_preprocess]]])
 VLM = ('vision', 'gemma')
 CONFIGS = {
     'fp32_eager': (False, False, False),
@@ -69,6 +69,7 @@ CONFIGS = {
     'bf16w_compile_all': (True, True, True, True, VLM, VLM),
     'defaults': (True, True, True, True, VLM, ('gemma',)),
     'defaults_bf16_dit': (True, True, True, True, VLM, ('gemma',), True),
+    'defaults_gpu_preprocess': (True, True, True, True, VLM, ('gemma',), True, True),
 }
 
 # name: (config_a, config_b, seed offset for b)
@@ -89,6 +90,8 @@ COMPARISONS = {
     'defaults vs fp32 eager': ('defaults', 'fp32_eager', 0),
     'BF16 DiT vs defaults': ('defaults_bf16_dit', 'defaults', 0),
     'BF16 DiT (defaults) vs fp32 eager': ('defaults_bf16_dit', 'fp32_eager', 0),
+    'GPU preprocess vs BF16 DiT defaults': ('defaults_gpu_preprocess', 'defaults_bf16_dit', 0),
+    'GPU preprocess (defaults) vs fp32 eager': ('defaults_gpu_preprocess', 'fp32_eager', 0),
     'fp32, different seed (sampling spread)': ('fp32_eager', 'fp32_eager', 1000),
 }
 
@@ -216,6 +219,7 @@ def main():
         model.use_bf16 = use_bf16
         model.set_bf16_weights(bf16_weights, keep_fp32=True)
         model.set_dit_bf16(bool(dit and dit[0]), keep_fp32=True)
+        model.gpu_preprocess = len(dit) > 1 and dit[1]
         # Fresh DiT graph each time, like the VLM graphs below: set_dit_bf16 may swap the DiT weights
         dit_fn = compiled_dit_fn if compile_dit else model.act_model.net.forward_with_cfg
         model.act_model.graphed_cfg_step = CUDAGraphedStep(dit_fn) if use_graphs else model.act_model.net.forward_with_cfg

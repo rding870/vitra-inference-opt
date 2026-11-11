@@ -14,6 +14,14 @@ from vitra.models.vlm_builder import build_vlm
 from vitra.models.action_model.cuda_graph import CUDAGraphedStep
 from vitra.utils.overwatch import initialize_overwatch
 
+
+def _gpu_pixel_values(image, size=224):
+    """GPU version of PaliGemma's SiglipImageProcessor: bicubic resize to uint8 levels, then scale to
+    [-1, 1]. Differs from the PIL resize by at most 1 uint8 level on a few percent of pixels."""
+    x = torch.from_numpy(np.array(image)).cuda().permute(2, 0, 1)[None].float()
+    x = torch.nn.functional.interpolate(x, size=(size, size), mode="bicubic", antialias=True)
+    return x.round().clamp(0, 255) / 127.5 - 1.0
+
 # Initialize Overwatch =>> Wraps `logging.Logger`
 overwatch = initialize_overwatch(__name__)
 
@@ -52,6 +60,8 @@ class VITRA_Paligemma(nn.Module):
         # it drifted most (up to 11.8 mm wrist) for ~1 ms (precision_results/compile_and_vlm_graphs_*)
         self.compile_gemma = False
         self._vlm_steps = {}
+        self.gpu_preprocess = True
+        self._input_ids_cache = {}
 
         # Initialize the tokenizer and VLM backbone
         self.tokenizer, self.backbone = self._init_backbone()
@@ -561,9 +571,18 @@ class VITRA_Paligemma(nn.Module):
                 raise ValueError(f"Unsupported image shape: {image.shape}")
         prefix = '<image>'
         with torch.profiler.record_function("preprocess"):
-            model_inputs = self.processor(text=prefix + instruction, images=image, return_tensors="pt").to('cuda')
-        pixel_value = model_inputs['pixel_values']
-        input_ids = model_inputs['input_ids']
+            if self.gpu_preprocess:
+                # Token ids don't depend on the image, so tokenize once per instruction; resize and
+                # normalize the image on the GPU instead of on the CPU in the HF processor.
+                if instruction not in self._input_ids_cache:
+                    self._input_ids_cache[instruction] = self.processor(
+                        text=prefix + instruction, images=image, return_tensors="pt")['input_ids'].to('cuda')
+                input_ids = self._input_ids_cache[instruction]
+                pixel_value = torch.cat([_gpu_pixel_values(im) for im in (image if isinstance(image, list) else [image])])
+            else:
+                model_inputs = self.processor(text=prefix + instruction, images=image, return_tensors="pt").to('cuda')
+                pixel_value = model_inputs['pixel_values']
+                input_ids = model_inputs['input_ids']
 
         # Preprocess Image
         if isinstance(pixel_value, torch.Tensor):
