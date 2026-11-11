@@ -47,6 +47,7 @@ class DiffusionPolicy(nn.Module):
         #self.diffusion = create_diffusion(timestep_respacing="", noise_schedule = 'linear', diffusion_steps=100, sigma_small=True, learn_sigma = False)
         self.ddim_diffusion = None
         self.graphed_cfg_step = None
+        self.compile_step = False  # torch.compile the DiT step before CUDA graph capture (fuses small kernels)
         if self.diffusion.model_var_type in [gd.ModelVarType.LEARNED, gd.ModelVarType.LEARNED_RANGE]:
             learn_sigma = True
         else:
@@ -157,7 +158,11 @@ class DiffusionPolicy(nn.Module):
             else:
                 model_kwargs = dict(z=z, x_mask=x_mask, cfg_scale=cfg_scale)
             if self.graphed_cfg_step is None:
-                self.graphed_cfg_step = CUDAGraphedStep(self.net.forward_with_cfg)
+                step = self.net.forward_with_cfg
+                if self.compile_step:
+                    # Default mode, not reduce-overhead: CUDAGraphedStep does the graph capture itself
+                    step = torch.compile(step, dynamic=False)
+                self.graphed_cfg_step = CUDAGraphedStep(step)
             sample_fn = self.graphed_cfg_step
         else:
             if self.use_state == 'DiT':

@@ -86,6 +86,7 @@ def main():
     parser.add_argument('--profile_warmup', type=int, default=10, help='Unprofiled predictions to run before the first profiled one, so traces show warm latency (only used with --profile_dir)')
     parser.add_argument('--use_bf16', action='store_true', help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
     parser.add_argument('--bf16_weights', action='store_true', help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
+    parser.add_argument('--compile_dit', action='store_true', help='torch.compile the DiT sampling step before CUDA graph capture')
     parser.add_argument('--skip_visualization', action='store_true', help='Exit after VLA inference without rendering a video (MANO model files not required)')
 
     # === Environment Configuration ===
@@ -110,6 +111,7 @@ def main():
         parser.error('--bf16_weights requires --use_bf16')
     configs['use_bf16'] = args.use_bf16
     configs['bf16_weights'] = args.bf16_weights
+    configs['compile_dit'] = args.compile_dit
 
     # Check if a precomputed hand reconstruction .npy (same stem as image) exists.
     image_path_obj = Path(args.image_path)
@@ -563,6 +565,7 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
         model.eval()
         model.use_bf16 = configs_dict.get('use_bf16', False)
         model.set_bf16_weights(configs_dict.get('bf16_weights', False))
+        model.act_model.compile_step = configs_dict.get('compile_dit', False)
         normalizer = load_normalizer(configs_dict)
         print(f"[VLA Process] VLA model ready (use_bf16={model.use_bf16}, bf16_weights={configs_dict.get('bf16_weights', False)}).")
         
