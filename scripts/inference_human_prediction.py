@@ -85,7 +85,7 @@ def main():
     parser.add_argument('--profile_warmup', type=int, default=10, help='Unprofiled predictions to run before the first profiled one, so traces show warm latency (only used with --profile_dir)')
     parser.add_argument('--use_bf16', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
     parser.add_argument('--bf16_weights', action=argparse.BooleanOptionalAction, default=True, help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
-    parser.add_argument('--bf16_dit', action=argparse.BooleanOptionalAction, default=False, help='Run the DiT network in BF16 (guidance and DDIM update stay FP32); off until its precision check passes')
+    parser.add_argument('--bf16_dit', action=argparse.BooleanOptionalAction, default=True, help='Run the DiT network in BF16 (guidance and DDIM update stay FP32): ~35%% faster, +0.1-0.35 mm mean wrist drift vs FP32 (precision_results/bf16_dit_vs_fp32_*)')
     parser.add_argument('--compile_dit', action=argparse.BooleanOptionalAction, default=True, help='torch.compile the DiT sampling step before CUDA graph capture')
     parser.add_argument('--graph_vlm', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma through CUDA graphs')
     parser.add_argument('--compile_gemma', action=argparse.BooleanOptionalAction, default=True, help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
