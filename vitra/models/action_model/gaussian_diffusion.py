@@ -540,11 +540,13 @@ class GaussianDiffusion:
             * th.sqrt(1 - alpha_bar / alpha_bar_prev)
         )
         # Equation 12.
-        noise = th.randn_like(x)
         mean_pred = (
             out["pred_xstart"] * th.sqrt(alpha_bar_prev)
             + th.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps
         )
+        if eta == 0:  # sigma is 0, so the noise term is exactly 0: skip drawing it (keeps RNG out of CUDA graphs)
+            return {"sample": mean_pred, "pred_xstart": out["pred_xstart"]}
+        noise = th.randn_like(x)
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0

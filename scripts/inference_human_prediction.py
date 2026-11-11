@@ -89,6 +89,7 @@ def main():
     parser.add_argument('--bf16_weights', action=argparse.BooleanOptionalAction, default=True, help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
     parser.add_argument('--bf16_dit', action=argparse.BooleanOptionalAction, default=True, help='Run the DiT network in BF16 (guidance and DDIM update stay FP32): ~35%% faster, +0.1-0.35 mm mean wrist drift vs FP32 (precision_results/bf16_dit_vs_fp32_*)')
     parser.add_argument('--compile_dit', action=argparse.BooleanOptionalAction, default=True, help='torch.compile the DiT sampling step before CUDA graph capture')
+    parser.add_argument('--graph_ddim_step', action=argparse.BooleanOptionalAction, default=False, help='Experimental: CUDA-graph (and, with --compile_dit, compile) the DDIM update together with the DiT network, one graph per step. With --compile_dit it currently fails: torch.compile recompiles during graph capture')
     parser.add_argument('--graph_vlm', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma through CUDA graphs')
     parser.add_argument('--compile_gemma', action=argparse.BooleanOptionalAction, default=True, help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
     parser.add_argument('--skip_visualization', action='store_true', help='Exit after VLA inference without rendering a video (MANO model files not required)')
@@ -115,6 +116,7 @@ def main():
     configs['use_bf16'] = args.use_bf16
     configs['bf16_weights'] = args.bf16_weights
     configs['compile_dit'] = args.compile_dit
+    configs['graph_ddim_step'] = args.graph_ddim_step
     configs['bf16_dit'] = args.bf16_dit
     args.compile_gemma &= args.graph_vlm  # Gemma is only compiled together with its CUDA graph
     configs['graph_vlm'] = args.graph_vlm
@@ -574,6 +576,7 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
         model.set_bf16_weights(configs_dict.get('bf16_weights', False))
         model.set_dit_bf16(configs_dict.get('bf16_dit', False))
         model.act_model.compile_step = configs_dict.get('compile_dit', False)
+        model.act_model.graph_ddim_step = configs_dict.get('graph_ddim_step', False)
         model.graph_vlm = configs_dict.get('graph_vlm', False)
         model.compile_gemma = configs_dict.get('compile_gemma', False)
         normalizer = load_normalizer(configs_dict)

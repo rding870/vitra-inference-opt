@@ -260,6 +260,7 @@ class VITRA_Paligemma(nn.Module):
             self._dit_fp32_originals = None
         net.use_bf16 = enabled
         self.act_model.graphed_cfg_step = None
+        self.act_model.graphed_ddim_step = None
         # torch 2.3's compiled code does not notice param.data changing dtype, so drop it all and recompile
         torch._dynamo.reset()
 

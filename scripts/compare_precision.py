@@ -54,7 +54,7 @@ EXAMPLES = [
     ('./examples/0002.jpg', 'right', 'Left hand: None. Right hand: Pick up the picture of Michael Jackson.'),
 ]
 
-# name: (use_bf16, use_cuda_graphs, bf16_weights[, compile_dit, VLM parts in CUDA graphs, VLM parts compiled[, bf16_dit[, gpu_preprocess]]])
+# name: (use_bf16, use_cuda_graphs, bf16_weights[, compile_dit, VLM parts in CUDA graphs, VLM parts compiled[, bf16_dit[, gpu_preprocess[, graph_ddim_step]]]])
 VLM = ('vision', 'gemma')
 CONFIGS = {
     'fp32_eager': (False, False, False),
@@ -220,6 +220,10 @@ def main():
         model.set_bf16_weights(bf16_weights, keep_fp32=True)
         model.set_dit_bf16(bool(dit and dit[0]), keep_fp32=True)
         model.gpu_preprocess = len(dit) > 1 and dit[1]
+        # Whole DDIM step graphed (built lazily by the model, compiled when compile_dit); otherwise the graph below
+        model.act_model.graph_ddim_step = len(dit) > 2 and dit[2]
+        model.act_model.compile_step = compile_dit
+        model.act_model.graphed_ddim_step = None
         # Fresh DiT graph each time, like the VLM graphs below: set_dit_bf16 may swap the DiT weights
         dit_fn = compiled_dit_fn if compile_dit else model.act_model.net.forward_with_cfg
         model.act_model.graphed_cfg_step = CUDAGraphedStep(dit_fn) if use_graphs else model.act_model.net.forward_with_cfg

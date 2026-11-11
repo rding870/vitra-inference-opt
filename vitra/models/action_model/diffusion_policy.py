@@ -47,6 +47,8 @@ class DiffusionPolicy(nn.Module):
         self.ddim_diffusion = None
         self.graphed_cfg_step = None
         self.compile_step = False  # torch.compile the DiT step before CUDA graph capture (fuses small kernels)
+        self.graph_ddim_step = False  # graph (and compile) the DDIM update together with the network, per step
+        self.graphed_ddim_step = None
         if self.diffusion.model_var_type in [gd.ModelVarType.LEARNED, gd.ModelVarType.LEARNED_RANGE]:
             learn_sigma = True
         else:
@@ -156,7 +158,7 @@ class DiffusionPolicy(nn.Module):
                 )
             else:
                 model_kwargs = dict(z=z, x_mask=x_mask, cfg_scale=cfg_scale)
-            if self.graphed_cfg_step is None:
+            if self.graphed_cfg_step is None and not self.graph_ddim_step:
                 step = self.net.forward_with_cfg
                 if self.compile_step:
                     # Default mode, not reduce-overhead: CUDAGraphedStep does the graph capture itself
@@ -173,16 +175,19 @@ class DiffusionPolicy(nn.Module):
         if use_ddim and num_ddim_steps is not None:
             if self.ddim_diffusion is None:
                 self.create_ddim(ddim_step=num_ddim_steps)
-            samples = self.ddim_diffusion.ddim_sample_loop(
-                sample_fn, 
-                noise.shape, 
-                noise, 
-                clip_denoised=False,
-                model_kwargs=model_kwargs,
-                progress=False,
-                device=action_features.device,
-                eta=0.0
-            )
+            if using_cfg and self.graph_ddim_step:
+                samples = self._graphed_ddim_loop(noise, model_kwargs)
+            else:
+                samples = self.ddim_diffusion.ddim_sample_loop(
+                    sample_fn,
+                    noise.shape,
+                    noise,
+                    clip_denoised=False,
+                    model_kwargs=model_kwargs,
+                    progress=False,
+                    device=action_features.device,
+                    eta=0.0
+                )
         else:
             samples = self.ddim_diffusion.diffusion.p_sample_loop(
                 sample_fn, 
@@ -196,6 +201,21 @@ class DiffusionPolicy(nn.Module):
         if using_cfg:
             samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
         return samples
+
+    def _ddim_step(self, x, t, **model_kwargs):
+        """One DDIM step: DiT network, guidance and the DDIM update (eta=0), as one function to compile and graph."""
+        return self.ddim_diffusion.ddim_sample(
+            self.net.forward_with_cfg, x, t, clip_denoised=False, model_kwargs=model_kwargs, eta=0.0)["sample"]
+
+    def _graphed_ddim_loop(self, x, model_kwargs):
+        """Same steps as ddim_sample_loop, but each whole step replays one CUDA graph."""
+        if self.graphed_ddim_step is None:
+            step = torch.compile(self._ddim_step, dynamic=False) if self.compile_step else self._ddim_step
+            self.graphed_ddim_step = CUDAGraphedStep(step)
+        for i in reversed(range(self.ddim_diffusion.num_timesteps)):
+            t = torch.full((x.shape[0],), i, device=x.device, dtype=torch.long)
+            x = self.graphed_ddim_step(x, t, **model_kwargs)
+        return x
 
     # Create DDIM sampler
     def create_ddim(self, ddim_step=10):
