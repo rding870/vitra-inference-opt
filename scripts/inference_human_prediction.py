@@ -85,6 +85,7 @@ def main():
     parser.add_argument('--profile_warmup', type=int, default=10, help='Unprofiled predictions to run before the first profiled one, so traces show warm latency (only used with --profile_dir)')
     parser.add_argument('--use_bf16', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
     parser.add_argument('--bf16_weights', action=argparse.BooleanOptionalAction, default=True, help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
+    parser.add_argument('--bf16_dit', action=argparse.BooleanOptionalAction, default=False, help='Run the DiT network in BF16 (guidance and DDIM update stay FP32); off until its precision check passes')
     parser.add_argument('--compile_dit', action=argparse.BooleanOptionalAction, default=True, help='torch.compile the DiT sampling step before CUDA graph capture')
     parser.add_argument('--graph_vlm', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma through CUDA graphs')
     parser.add_argument('--compile_gemma', action=argparse.BooleanOptionalAction, default=True, help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
@@ -112,6 +113,7 @@ def main():
     configs['use_bf16'] = args.use_bf16
     configs['bf16_weights'] = args.bf16_weights
     configs['compile_dit'] = args.compile_dit
+    configs['bf16_dit'] = args.bf16_dit
     args.compile_gemma &= args.graph_vlm  # Gemma is only compiled together with its CUDA graph
     configs['graph_vlm'] = args.graph_vlm
     configs['compile_gemma'] = args.compile_gemma
@@ -568,6 +570,7 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
         model.eval()
         model.use_bf16 = configs_dict.get('use_bf16', False)
         model.set_bf16_weights(configs_dict.get('bf16_weights', False))
+        model.set_dit_bf16(configs_dict.get('bf16_dit', False))
         model.act_model.compile_step = configs_dict.get('compile_dit', False)
         model.graph_vlm = configs_dict.get('graph_vlm', False)
         model.compile_gemma = configs_dict.get('compile_gemma', False)

@@ -51,7 +51,7 @@ EXAMPLES = [
     ('./examples/0002.jpg', 'right', 'Left hand: None. Right hand: Pick up the picture of Michael Jackson.'),
 ]
 
-# name: (use_bf16, use_cuda_graphs, bf16_weights[, compile_dit, VLM parts in CUDA graphs, VLM parts compiled])
+# name: (use_bf16, use_cuda_graphs, bf16_weights[, compile_dit, VLM parts in CUDA graphs, VLM parts compiled[, bf16_dit]])
 VLM = ('vision', 'gemma')
 CONFIGS = {
     'fp32_eager': (False, False, False),
@@ -64,6 +64,8 @@ CONFIGS = {
     'bf16w_compile_vision': (True, True, True, True, VLM, ('vision',)),
     'bf16w_compile_gemma': (True, True, True, True, VLM, ('gemma',)),
     'bf16w_compile_all': (True, True, True, True, VLM, VLM),
+    'defaults': (True, True, True, True, VLM, ('gemma',)),
+    'defaults_bf16_dit': (True, True, True, True, VLM, ('gemma',), True),
 }
 
 # name: (config_a, config_b, seed offset for b)
@@ -81,6 +83,9 @@ COMPARISONS = {
     'compile all vs VLM graphs': ('bf16w_compile_all', 'bf16w_graph_vlm', 0),
     'VLM graphs + compile DiT vs fp32 eager': ('bf16w_graph_vlm', 'fp32_eager', 0),
     'compile all vs fp32 eager': ('bf16w_compile_all', 'fp32_eager', 0),
+    'defaults vs fp32 eager': ('defaults', 'fp32_eager', 0),
+    'BF16 DiT vs defaults': ('defaults_bf16_dit', 'defaults', 0),
+    'BF16 DiT (defaults) vs fp32 eager': ('defaults_bf16_dit', 'fp32_eager', 0),
     'fp32, different seed (sampling spread)': ('fp32_eager', 'fp32_eager', 1000),
 }
 
@@ -198,18 +203,19 @@ def main():
 
     model.extract_cognition_token = extract_and_keep
 
-    graphed_step = CUDAGraphedStep(model.act_model.net.forward_with_cfg)
-    compiled_dit_step = CUDAGraphedStep(torch.compile(model.act_model.net.forward_with_cfg, dynamic=False))
+    compiled_dit_fn = torch.compile(model.act_model.net.forward_with_cfg, dynamic=False)
     vlm_fns = {'vision': model._vision_forward, 'gemma': model._gemma_forward}
     compiled_vlm_fns = {k: torch.compile(fn, dynamic=False) for k, fn in vlm_fns.items()}  # compile once, reuse
 
     def set_config(name):
         use_bf16, use_graphs, bf16_weights, *fast = CONFIGS[name]
-        compile_dit, graph_parts, compile_parts = fast or (False, (), ())
+        compile_dit, graph_parts, compile_parts, *dit = fast or (False, (), ())
         model.use_bf16 = use_bf16
         model.set_bf16_weights(bf16_weights, keep_fp32=True)
-        dit_step = compiled_dit_step if compile_dit else graphed_step
-        model.act_model.graphed_cfg_step = dit_step if use_graphs else model.act_model.net.forward_with_cfg
+        model.set_dit_bf16(bool(dit and dit[0]), keep_fp32=True)
+        # Fresh DiT graph each time, like the VLM graphs below: set_dit_bf16 may swap the DiT weights
+        dit_fn = compiled_dit_fn if compile_dit else model.act_model.net.forward_with_cfg
+        model.act_model.graphed_cfg_step = CUDAGraphedStep(dit_fn) if use_graphs else model.act_model.net.forward_with_cfg
         # Fresh VLM graphs each time: captured graphs point at the weights, which set_bf16_weights may swap
         model.graph_vlm = bool(graph_parts)
         model._vlm_steps = {

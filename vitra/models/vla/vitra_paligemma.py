@@ -225,6 +225,34 @@ class VITRA_Paligemma(nn.Module):
             self._fp32_originals = None
         self._bf16_weights = enabled
 
+    def set_dit_bf16(self, enabled=True, keep_fp32=False):
+        """Run the DiT network in BF16: BF16 autocast plus nn.Linear weights stored in BF16, so each
+        denoising step reads half the weight bytes. Classifier-free guidance and the DDIM update stay
+        in FP32. keep_fp32=True keeps the FP32 weights so set_dit_bf16(False) can restore them.
+        Drops the DiT's CUDA graph, which points at the old weights; it is recaptured on the next call."""
+        net = self.act_model.net
+        if enabled == net.use_bf16:
+            return
+        if enabled:
+            originals = {}
+            for layer in net.modules():
+                if isinstance(layer, nn.Linear):
+                    for param in (layer.weight, layer.bias):
+                        if param is not None:
+                            originals[param] = param.data
+                            param.data = param.data.to(torch.bfloat16)
+            self._dit_fp32_originals = originals if keep_fp32 else None
+        else:
+            if getattr(self, "_dit_fp32_originals", None) is None:
+                raise RuntimeError("FP32 DiT weights were not kept; call set_dit_bf16(True, keep_fp32=True) to allow switching back")
+            for param, original in self._dit_fp32_originals.items():
+                param.data = original
+            self._dit_fp32_originals = None
+        net.use_bf16 = enabled
+        self.act_model.graphed_cfg_step = None
+        # torch 2.3's compiled code does not notice param.data changing dtype, so drop it all and recompile
+        torch._dynamo.reset()
+
     def _forward_act_model(
         self,
         vlm_features: torch.Tensor,

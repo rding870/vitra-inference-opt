@@ -239,6 +239,7 @@ class DiT(nn.Module):
         self.past_action_window_size = past_action_window_size
         self.future_action_window_size = future_action_window_size
         self.use_state = use_state
+        self.use_bf16 = False  # run the network (not the guidance) under BF16 autocast, see _network
         self.x_embedder = ActionEmbedder(action_size=self.in_channels, hidden_size=hidden_size)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.z_embedder = LabelEmbedder(in_size=token_size, hidden_size=hidden_size, dropout_prob=class_dropout_prob, conditions_shape=(1, 1, token_size))
@@ -332,6 +333,12 @@ class DiT(nn.Module):
         return x[:,-(self.future_action_window_size+1):,:]  #[B, T, C]
 
     #TO DO: Check codes for forward_with_cfg
+    def _network(self, *args):
+        """forward(), under BF16 autocast if use_bf16 (norms and softmax still run in FP32), returning FP32.
+        The autocast cache is off because cached weight casts would go stale across CUDA graph replays."""
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16, cache_enabled=False):
+            return self.forward(*args).float()
+
     def forward_with_cfg(self, x, t, z, x_mask, cfg_scale, state=None, state_mask=None): #history
         """
         Forward pass of Diffusion, but also batches the unconditional forward pass for classifier-free guidance.
@@ -348,12 +355,13 @@ class DiT(nn.Module):
             state = state * state_mask
             combined = torch.cat([half, half], dim=0).to(next(self.x_embedder.parameters()).dtype)
             with torch.profiler.record_function("dit_step"):
-                model_out = self.forward(combined, t, z, state, state_mask)
+                model_out = self._network(combined, t, z, state, state_mask)
         else:
             combined = torch.cat([half, half], dim=0).to(next(self.x_embedder.parameters()).dtype)
             with torch.profiler.record_function("dit_step"):
-                model_out = self.forward(combined, t, z)
+                model_out = self._network(combined, t, z)
 
+        # Guidance stays in FP32 even with use_bf16: it scales the cond - uncond difference by cfg_scale
         eps, rest = model_out[:, :, :self.in_channels], model_out[:, :, self.in_channels:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)

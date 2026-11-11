@@ -138,6 +138,7 @@ def main():
     parser.add_argument('--use_bf16', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
     parser.add_argument('--bf16_weights', action=argparse.BooleanOptionalAction, default=True, help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
     parser.add_argument('--no_cuda_graphs', action='store_true', help='Run the DiT sampling steps eagerly instead of through a CUDA graph')
+    parser.add_argument('--bf16_dit', action=argparse.BooleanOptionalAction, default=False, help='Run the DiT network in BF16 (guidance and DDIM update stay FP32); off until its precision check passes')
     parser.add_argument('--compile_dit', action=argparse.BooleanOptionalAction, default=True, help='torch.compile the DiT sampling step before CUDA graph capture')
     parser.add_argument('--graph_vlm', action=argparse.BooleanOptionalAction, default=True, help='Run the vision encoder and Gemma through CUDA graphs')
     parser.add_argument('--compile_gemma', action=argparse.BooleanOptionalAction, default=True, help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
@@ -154,6 +155,7 @@ def main():
     model.eval()
     model.use_bf16 = args.use_bf16
     model.set_bf16_weights(args.bf16_weights)
+    model.set_dit_bf16(args.bf16_dit)
     model.act_model.compile_step = args.compile_dit
     args.compile_gemma &= args.graph_vlm  # Gemma is only compiled together with its CUDA graph
     model.graph_vlm = args.graph_vlm
@@ -199,6 +201,7 @@ def main():
             'use_bf16': model.use_bf16,
             'bf16_weights': args.bf16_weights,
             'cuda_graphs': not args.no_cuda_graphs,
+            'bf16_dit': args.bf16_dit,
             'compile_dit': args.compile_dit,
             'graph_vlm': args.graph_vlm,
             'compile_gemma': args.compile_gemma,
