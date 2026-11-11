@@ -87,6 +87,8 @@ def main():
     parser.add_argument('--use_bf16', action='store_true', help='Run the vision encoder and Gemma under bf16 autocast (the DiT action head stays fp32)')
     parser.add_argument('--bf16_weights', action='store_true', help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
     parser.add_argument('--compile_dit', action='store_true', help='torch.compile the DiT sampling step before CUDA graph capture')
+    parser.add_argument('--graph_vlm', action='store_true', help='Run the vision encoder and Gemma through CUDA graphs')
+    parser.add_argument('--compile_gemma', action='store_true', help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
     parser.add_argument('--skip_visualization', action='store_true', help='Exit after VLA inference without rendering a video (MANO model files not required)')
 
     # === Environment Configuration ===
@@ -112,6 +114,10 @@ def main():
     configs['use_bf16'] = args.use_bf16
     configs['bf16_weights'] = args.bf16_weights
     configs['compile_dit'] = args.compile_dit
+    if args.compile_gemma and not args.graph_vlm:
+        parser.error('--compile_gemma requires --graph_vlm')
+    configs['graph_vlm'] = args.graph_vlm
+    configs['compile_gemma'] = args.compile_gemma
 
     # Check if a precomputed hand reconstruction .npy (same stem as image) exists.
     image_path_obj = Path(args.image_path)
@@ -566,6 +572,8 @@ def _vla_inference_worker(configs_dict, task_queue, result_queue, profile_dir=No
         model.use_bf16 = configs_dict.get('use_bf16', False)
         model.set_bf16_weights(configs_dict.get('bf16_weights', False))
         model.act_model.compile_step = configs_dict.get('compile_dit', False)
+        model.graph_vlm = configs_dict.get('graph_vlm', False)
+        model.compile_gemma = configs_dict.get('compile_gemma', False)
         normalizer = load_normalizer(configs_dict)
         print(f"[VLA Process] VLA model ready (use_bf16={model.use_bf16}, bf16_weights={configs_dict.get('bf16_weights', False)}).")
         

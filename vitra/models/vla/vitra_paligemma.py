@@ -11,6 +11,7 @@ from functools import partial
 
 from vitra.utils.tensor_utils import move_masked_to_left, get_mask_of_last_masked_index, move_masked_to_left_ids
 from vitra.models.vlm_builder import build_vlm
+from vitra.models.action_model.cuda_graph import CUDAGraphedStep
 from vitra.utils.overwatch import initialize_overwatch
 
 # Initialize Overwatch =>> Wraps `logging.Logger`
@@ -46,6 +47,11 @@ class VITRA_Paligemma(nn.Module):
         self.use_state = use_state
         self.use_fov = use_fov
         self.use_bf16 = use_bf16
+        self.graph_vlm = False  # inference only: run the vision encoder and Gemma through CUDA graphs
+        # With graph_vlm: torch.compile Gemma before capture. The vision encoder is never compiled:
+        # it drifted most (up to 11.8 mm wrist) for ~1 ms (precision_results/compile_and_vlm_graphs_*)
+        self.compile_gemma = False
+        self._vlm_steps = {}
         if self.action_type == 'angle':
             self.hand_dim = 51
         elif self.action_type == 'keypoints':
@@ -384,9 +390,8 @@ class VITRA_Paligemma(nn.Module):
         position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
         # Merge text and images
         if pixel_values is not None:
-            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16):
-                with torch.profiler.record_function("vision_encoder"):
-                    image_features = self.model.get_image_features(pixel_values)
+            with torch.profiler.record_function("vision_encoder"):
+                image_features = self._run_vlm_part("vision", self._vision_forward, pixel_values)
 
             special_image_mask = (input_ids == self.model.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -432,18 +437,36 @@ class VITRA_Paligemma(nn.Module):
                     **kwargs,
                 )
 
-        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16):
-            with torch.profiler.record_function("gemma"):
-                outputs = self.model.language_model(
-                    past_key_values=None,
-                    use_cache=use_cache,
-                    output_hidden_states=True,
-                    num_logits_to_keep=0, # can be modified
-                    **vlm_inputs
-                )
-
-        output_hs = outputs.hidden_states[-1]
+        with torch.profiler.record_function("gemma"):
+            output_hs = self._run_vlm_part("gemma", self._gemma_forward, use_cache=use_cache, **vlm_inputs)
         return output_hs, inputs_masks
+
+    # The autocast cache is off in these two because cached weight casts would go stale across CUDA graph replays
+    def _vision_forward(self, pixel_values):
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16, cache_enabled=False):
+            return self.model.get_image_features(pixel_values)
+
+    def _gemma_forward(self, use_cache=False, **vlm_inputs):
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_bf16, cache_enabled=False):
+            outputs = self.model.language_model(
+                past_key_values=None,
+                use_cache=use_cache,
+                output_hidden_states=True,
+                num_logits_to_keep=0, # can be modified
+                **vlm_inputs
+            )
+        return outputs.hidden_states[-1]
+
+    def _run_vlm_part(self, name, fn, *args, **kwargs):
+        """Run the vision encoder or Gemma eagerly, or (inference with graph_vlm on) through a CUDA graph,
+        with Gemma optionally torch.compile'd first (compile_gemma)."""
+        if not (self.graph_vlm and not torch.is_grad_enabled()):
+            return fn(*args, **kwargs)
+        if name not in self._vlm_steps:
+            if name == "gemma" and self.compile_gemma:
+                fn = torch.compile(fn, dynamic=False)
+            self._vlm_steps[name] = CUDAGraphedStep(fn)
+        return self._vlm_steps[name](*args, **kwargs)
 
     def forward(
         self,

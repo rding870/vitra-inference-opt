@@ -139,6 +139,8 @@ def main():
     parser.add_argument('--bf16_weights', action='store_true', help='Also store their linear weights in bf16, so autocast does not re-cast them every call (requires --use_bf16)')
     parser.add_argument('--no_cuda_graphs', action='store_true', help='Run the DiT sampling steps eagerly instead of through a CUDA graph')
     parser.add_argument('--compile_dit', action='store_true', help='torch.compile the DiT sampling step before CUDA graph capture')
+    parser.add_argument('--graph_vlm', action='store_true', help='Run the vision encoder and Gemma through CUDA graphs')
+    parser.add_argument('--compile_gemma', action='store_true', help='torch.compile Gemma before CUDA graph capture (requires --graph_vlm; the vision encoder is never compiled: it drifts most and gains ~1 ms)')
     parser.add_argument('--output', type=str, required=True, help='Path to save the JSON results')
     args = parser.parse_args()
     if args.bf16_weights and not args.use_bf16:
@@ -154,6 +156,10 @@ def main():
     model.use_bf16 = args.use_bf16
     model.set_bf16_weights(args.bf16_weights)
     model.act_model.compile_step = args.compile_dit
+    if args.compile_gemma and not args.graph_vlm:
+        parser.error('--compile_gemma requires --graph_vlm')
+    model.graph_vlm = args.graph_vlm
+    model.compile_gemma = args.compile_gemma
     if args.no_cuda_graphs:
         # predict_action only builds the graphed step when this is None, so this keeps sampling eager
         model.act_model.graphed_cfg_step = model.act_model.net.forward_with_cfg
@@ -196,6 +202,8 @@ def main():
             'bf16_weights': args.bf16_weights,
             'cuda_graphs': not args.no_cuda_graphs,
             'compile_dit': args.compile_dit,
+            'graph_vlm': args.graph_vlm,
+            'compile_gemma': args.compile_gemma,
             'grad_enabled': torch.is_grad_enabled(),
             'params_requiring_grad': sum(p.requires_grad for p in model.parameters()),
             'batch_size': 1,
