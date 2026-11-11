@@ -1,0 +1,94 @@
+Loading config from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/configs/config.json
+Initializing services...
+Found precomputed hand state results: examples/0002.npy. Using the state instead of running hand recon.
+[VLA Process] Loading VLA model...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [02:10<02:10, 130.43s/it]Loading checkpoint shards: 100%|██████████| 2/2 [02:23<00:00, 61.53s/it] Loading checkpoint shards: 100%|██████████| 2/2 [02:23<00:00, 71.86s/it]
+11/11 [00:05:36] INFO     | >> [*] Using separate          vitra_paligemma.py:84
+                          cognition token                                       
+                 INFO     | >> [*] Cognition token id: 10  vitra_paligemma.py:85
+                 INFO     | >> [*] Init cognition token    vitra_paligemma.py:90
+                          with id=10                                            
+Loading model from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B
+Found checkpoint: checkpoints/vitra-vla-3b.pt
+Loading checkpoint from /root/hf/hub/models--VITRA-VLA--VITRA-VLA-3B/snapshots/54f9d3299811ddbb74d237432b301917013fee52/checkpoints/vitra-vla-3b.pt
+Checkpoint loaded
+Loading statistics from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/statistics/dataset_statistics.json
+[VLA Process] VLA model ready (use_bf16=True, bf16_weights=True).
+VLA inference service initialized
+Running VLA inference...
+/root/.venvs/vitra/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:124: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+[VLA Process] Warmup 1/10: 32664.8 ms
+[VLA Process] Warmup 2/10: 48.0 ms
+[VLA Process] Warmup 3/10: 45.5 ms
+[VLA Process] Warmup 4/10: 45.8 ms
+[VLA Process] Warmup 5/10: 46.0 ms
+[VLA Process] Warmup 6/10: 46.2 ms
+[VLA Process] Warmup 7/10: 46.4 ms
+[VLA Process] Warmup 8/10: 45.6 ms
+[VLA Process] Warmup 9/10: 47.5 ms
+[VLA Process] Warmup 10/10: 46.3 ms
+STAGE:2026-11-11 00:07:39 18664:18664 ActivityProfilerController.cpp:314] Completed Stage: Warm Up
+STAGE:2026-11-11 00:07:39 18664:18664 ActivityProfilerController.cpp:320] Completed Stage: Collection
+STAGE:2026-11-11 00:07:39 18664:18664 ActivityProfilerController.cpp:324] Completed Stage: Post Processing
+[VLA Process] Profiled call: 57.8 ms wall-clock, slower than the warmup calls because of profiler overhead
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                        ampere_sgemm_64x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       7.731ms        25.79%       7.731ms      19.823us           390  
+ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_...         0.00%       0.000us         0.00%       0.000us       0.000us       4.311ms        14.38%       4.311ms      82.904us            52  
+                                 ampere_sgemm_128x64_tn         0.00%       0.000us         0.00%       0.000us       0.000us       3.766ms        12.56%       3.766ms      31.383us           120  
+                       ampere_sgemm_128x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       2.998ms        10.00%       2.998ms      24.983us           120  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       2.414ms         8.05%       2.414ms      46.423us            52  
+fmha_cutlassF_f32_aligned_64x64_rf_sm80(PyTorchMemEf...         0.00%       0.000us         0.00%       0.000us       0.000us     961.000us         3.21%     961.000us       8.008us           120  
+ampere_bf16_s16816gemm_bf16_64x64_ldg8_relu_f2f_stag...         0.00%       0.000us         0.00%       0.000us       0.000us     652.000us         2.18%     652.000us       6.037us           108  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     514.000us         1.71%     514.000us      19.037us            27  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     456.000us         1.52%     456.000us       8.769us            52  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     435.000us         1.45%     435.000us      16.731us            26  
+                        ampere_sgemm_32x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us     418.000us         1.39%     418.000us       8.360us            50  
+void splitKreduce_kernel<32, 16, int, float, float, ...         0.00%       0.000us         0.00%       0.000us       0.000us     400.000us         1.33%     400.000us       1.000us           400  
+                                        triton__0d1d2de         0.00%       0.000us         0.00%       0.000us       0.000us     399.000us         1.33%     399.000us       1.405us           284  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     397.000us         1.32%     397.000us      14.179us            28  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us     286.000us         0.95%     286.000us      11.000us            26  
+                                   triton__0d1d2d3de4de         0.00%       0.000us         0.00%       0.000us       0.000us     240.000us         0.80%     240.000us       1.000us           240  
+                         triton__0d1d2d3d4d5d6d7d8de9de         0.00%       0.000us         0.00%       0.000us       0.000us     240.000us         0.80%     240.000us       2.000us           120  
+void splitKreduce_kernel<32, 16, int, __nv_bfloat16,...         0.00%       0.000us         0.00%       0.000us       0.000us     232.000us         0.77%     232.000us       2.231us           104  
+                                            aten::copy_         2.16%       1.247ms        49.88%      28.809ms      79.146us     228.000us         0.76%     253.000us       0.695us           364  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     225.000us         0.75%     225.000us       2.009us           112  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 57.758ms
+Self CUDA time total: 29.974ms
+
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------------------------------------------------------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls                                                        Input Shapes  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------------------------------------------------------------  
+                        ampere_sgemm_64x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       7.731ms        25.79%       7.731ms      19.823us           390                                                                  []  
+ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_...         0.00%       0.000us         0.00%       0.000us       0.000us       4.311ms        14.38%       4.311ms      82.904us            52                                                                  []  
+                                 ampere_sgemm_128x64_tn         0.00%       0.000us         0.00%       0.000us       0.000us       3.766ms        12.56%       3.766ms      31.383us           120                                                                  []  
+                       ampere_sgemm_128x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       2.998ms        10.00%       2.998ms      24.983us           120                                                                  []  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       2.414ms         8.05%       2.414ms      46.423us            52                                                                  []  
+fmha_cutlassF_f32_aligned_64x64_rf_sm80(PyTorchMemEf...         0.00%       0.000us         0.00%       0.000us       0.000us     961.000us         3.21%     961.000us       8.008us           120                                                                  []  
+ampere_bf16_s16816gemm_bf16_64x64_ldg8_relu_f2f_stag...         0.00%       0.000us         0.00%       0.000us       0.000us     652.000us         2.18%     652.000us       6.037us           108                                                                  []  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     514.000us         1.71%     514.000us      19.037us            27                                                                  []  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     456.000us         1.52%     456.000us       8.769us            52                                                                  []  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     435.000us         1.45%     435.000us      16.731us            26                                                                  []  
+                        ampere_sgemm_32x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us     418.000us         1.39%     418.000us       8.360us            50                                                                  []  
+void splitKreduce_kernel<32, 16, int, float, float, ...         0.00%       0.000us         0.00%       0.000us       0.000us     400.000us         1.33%     400.000us       1.000us           400                                                                  []  
+                                        triton__0d1d2de         0.00%       0.000us         0.00%       0.000us       0.000us     399.000us         1.33%     399.000us       1.405us           284                                                                  []  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     397.000us         1.32%     397.000us      14.179us            28                                                                  []  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us     286.000us         0.95%     286.000us      11.000us            26                                                                  []  
+                                   triton__0d1d2d3de4de         0.00%       0.000us         0.00%       0.000us       0.000us     240.000us         0.80%     240.000us       1.000us           240                                                                  []  
+                         triton__0d1d2d3d4d5d6d7d8de9de         0.00%       0.000us         0.00%       0.000us       0.000us     240.000us         0.80%     240.000us       2.000us           120                                                                  []  
+void splitKreduce_kernel<32, 16, int, __nv_bfloat16,...         0.00%       0.000us         0.00%       0.000us       0.000us     232.000us         0.77%     232.000us       2.231us           104                                                                  []  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     225.000us         0.75%     225.000us       2.009us           112                                                                  []  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     222.000us         0.74%     222.000us       3.895us            57                                                                  []  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------------------------------------------------------------  
+Self CPU time total: 57.758ms
+Self CUDA time total: 29.974ms
+
+[VLA Process] Saved profiler trace to profiler_traces/defaults/predict_0.json
+Skipping visualization. Predicted action shape: (4, 16, 102)
+Shutting down services...
+[VLA Process] Received shutdown signal
+[VLA Process] Cleaned up and exiting
+All services shut down successfully

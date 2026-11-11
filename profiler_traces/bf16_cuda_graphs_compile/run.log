@@ -1,0 +1,95 @@
+Loading config from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/configs/config.json
+Initializing services...
+Found precomputed hand state results: examples/0002.npy. Using the state instead of running hand recon.
+[VLA Process] Loading VLA model...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [01:28<01:28, 88.49s/it]Loading checkpoint shards: 100%|██████████| 2/2 [01:41<00:00, 44.36s/it]Loading checkpoint shards: 100%|██████████| 2/2 [01:41<00:00, 50.98s/it]
+11/10 [23:11:50] INFO     | >> [*] Using separate          vitra_paligemma.py:78
+                          cognition token                                       
+                 INFO     | >> [*] Cognition token id: 10  vitra_paligemma.py:79
+                 INFO     | >> [*] Init cognition token    vitra_paligemma.py:84
+                          with id=10                                            
+Loading model from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B
+Found checkpoint: checkpoints/vitra-vla-3b.pt
+Loading checkpoint from /root/hf/hub/models--VITRA-VLA--VITRA-VLA-3B/snapshots/54f9d3299811ddbb74d237432b301917013fee52/checkpoints/vitra-vla-3b.pt
+Checkpoint loaded
+Loading statistics from Hugging Face Hub: VITRA-VLA/VITRA-VLA-3B/statistics/dataset_statistics.json
+[VLA Process] VLA model ready (use_bf16=True, bf16_weights=True).
+VLA inference service initialized
+Running VLA inference...
+W1110 23:13:28.528000 125255492764224 torch/_logging/_internal.py:1013] [0/0] Profiler function <class 'torch.autograd.profiler.record_function'> will be ignored
+/root/.venvs/vitra/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:124: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+[VLA Process] Warmup 1/10: 14732.4 ms
+[VLA Process] Warmup 2/10: 70.8 ms
+[VLA Process] Warmup 3/10: 66.7 ms
+[VLA Process] Warmup 4/10: 63.2 ms
+[VLA Process] Warmup 5/10: 63.2 ms
+[VLA Process] Warmup 6/10: 63.4 ms
+[VLA Process] Warmup 7/10: 63.6 ms
+[VLA Process] Warmup 8/10: 63.4 ms
+[VLA Process] Warmup 9/10: 66.7 ms
+[VLA Process] Warmup 10/10: 63.3 ms
+STAGE:2026-11-10 23:13:37 14243:14243 ActivityProfilerController.cpp:314] Completed Stage: Warm Up
+STAGE:2026-11-10 23:13:38 14243:14243 ActivityProfilerController.cpp:320] Completed Stage: Collection
+STAGE:2026-11-10 23:13:38 14243:14243 ActivityProfilerController.cpp:324] Completed Stage: Post Processing
+[VLA Process] Profiled call: 115.1 ms wall-clock, slower than the warmup calls because of profiler overhead
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                               aten::mm         2.15%       2.466ms         3.10%       3.562ms      19.464us      10.040ms        28.14%      10.073ms      55.044us           183  
+                        ampere_sgemm_64x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       7.741ms        21.70%       7.741ms      19.849us           390  
+ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_...         0.00%       0.000us         0.00%       0.000us       0.000us       4.474ms        12.54%       4.474ms      86.038us            52  
+                                 ampere_sgemm_128x64_tn         0.00%       0.000us         0.00%       0.000us       0.000us       3.830ms        10.73%       3.830ms      31.917us           120  
+                       ampere_sgemm_128x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       2.982ms         8.36%       2.982ms      24.850us           120  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       2.425ms         6.80%       2.425ms      46.635us            52  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       1.995ms         5.59%       1.995ms       1.995ms             1  
+                                            aten::addmm         2.05%       2.361ms         2.70%       3.109ms      18.842us       1.592ms         4.46%       1.891ms      11.461us           165  
+                                            aten::copy_         3.29%       3.777ms        23.80%      27.357ms      29.072us       1.401ms         3.93%       1.623ms       1.725us           941  
+                                              aten::mul         2.74%       3.153ms         4.28%       4.917ms       9.737us       1.086ms         3.04%       1.111ms       2.200us           505  
+fmha_cutlassF_f32_aligned_64x64_rf_sm80(PyTorchMemEf...         0.00%       0.000us         0.00%       0.000us       0.000us     963.000us         2.70%     963.000us       8.025us           120  
+                                       cudaLaunchKernel        11.75%      13.511ms        11.75%      13.511ms       3.770us     920.000us         2.58%     922.000us       0.257us          3584  
+                                              aten::add         3.21%       3.686ms         4.78%       5.499ms      10.240us     802.000us         2.25%     938.000us       1.747us           537  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     670.000us         1.88%     670.000us       1.796us           373  
+ampere_bf16_s16816gemm_bf16_64x64_ldg8_relu_f2f_stag...         0.00%       0.000us         0.00%       0.000us       0.000us     651.000us         1.82%     651.000us       6.028us           108  
+                                              aten::bmm         1.09%       1.251ms         1.45%       1.665ms      21.346us     520.000us         1.46%     531.000us       6.808us            78  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     515.000us         1.44%     515.000us      19.074us            27  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     496.000us         1.39%     496.000us       9.538us            52  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     435.000us         1.22%     435.000us      16.731us            26  
+                        ampere_sgemm_32x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us     432.000us         1.21%     432.000us       8.640us            50  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 114.943ms
+Self CUDA time total: 35.681ms
+
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  --------------------------------------------------------------------------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls                                                                      Input Shapes  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  --------------------------------------------------------------------------------  
+                        ampere_sgemm_64x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       7.741ms        21.70%       7.741ms      19.849us           390                                                                                []  
+                                               aten::mm         0.60%     695.000us         0.80%     914.000us      17.577us       4.474ms        12.54%       4.482ms      86.192us            52                                                       [[276, 2304], [2304, 9216]]  
+ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_...         0.00%       0.000us         0.00%       0.000us       0.000us       4.474ms        12.54%       4.474ms      86.038us            52                                                                                []  
+                                 ampere_sgemm_128x64_tn         0.00%       0.000us         0.00%       0.000us       0.000us       3.830ms        10.73%       3.830ms      31.917us           120                                                                                []  
+                       ampere_sgemm_128x32_sliced1x4_tn         0.00%       0.000us         0.00%       0.000us       0.000us       2.982ms         8.36%       2.982ms      24.850us           120                                                                                []  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       2.425ms         6.80%       2.425ms      46.635us            52                                                                                []  
+                                               aten::mm         0.31%     356.000us         0.48%     553.000us      21.269us       2.039ms         5.71%       2.054ms      79.000us            26                                                       [[276, 9216], [9216, 2304]]  
+                                               aten::mm         0.02%      20.000us         0.02%      26.000us      26.000us       1.995ms         5.59%       1.995ms       1.995ms             1                                                     [[276, 2304], [2304, 257216]]  
+void cutlass::Kernel<cutlass_80_tensorop_bf16_s16816...         0.00%       0.000us         0.00%       0.000us       0.000us       1.995ms         5.59%       1.995ms       1.995ms             1                                                                                []  
+fmha_cutlassF_f32_aligned_64x64_rf_sm80(PyTorchMemEf...         0.00%       0.000us         0.00%       0.000us       0.000us     963.000us         2.70%     963.000us       8.025us           120                                                                                []  
+                                       cudaLaunchKernel        11.75%      13.511ms        11.75%      13.511ms       3.770us     920.000us         2.58%     922.000us       0.257us          3584                                                                                []  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     670.000us         1.88%     670.000us       1.796us           373                                                                                []  
+                                            aten::addmm         1.30%       1.496ms         1.65%       1.896ms      17.556us     651.000us         1.82%     813.000us       7.528us           108                                       [[1152], [256, 1152], [1152, 1152], [], []]  
+ampere_bf16_s16816gemm_bf16_64x64_ldg8_relu_f2f_stag...         0.00%       0.000us         0.00%       0.000us       0.000us     651.000us         1.82%     651.000us       6.028us           108                                                                                []  
+                                               aten::mm         0.50%     576.000us         0.80%     914.000us      17.577us     581.000us         1.63%     586.000us      11.269us            52                                                       [[276, 2304], [2304, 1024]]  
+                                               aten::mm         0.40%     463.000us         0.59%     680.000us      26.154us     516.000us         1.45%     519.000us      19.962us            26                                                       [[276, 2304], [2304, 2048]]  
+                                            aten::addmm         0.32%     370.000us         0.50%     580.000us      21.481us     515.000us         1.44%     640.000us      23.704us            27                                       [[1152], [256, 4304], [4304, 1152], [], []]  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_relu_f2f_sta...         0.00%       0.000us         0.00%       0.000us       0.000us     515.000us         1.44%     515.000us      19.074us            27                                                                                []  
+ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_6...         0.00%       0.000us         0.00%       0.000us       0.000us     496.000us         1.39%     496.000us       9.538us            52                                                                                []  
+                                            aten::copy_         0.85%     974.000us         1.71%       1.962ms       8.244us     478.000us         1.34%     500.000us       2.101us           238                                              [[1, 276, 2304], [1, 276, 2304], []]  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  --------------------------------------------------------------------------------  
+Self CPU time total: 114.943ms
+Self CUDA time total: 35.681ms
+
+[VLA Process] Saved profiler trace to profiler_traces/bf16_cuda_graphs_compile/predict_0.json
+Skipping visualization. Predicted action shape: (4, 16, 102)
+Shutting down services...
+[VLA Process] Received shutdown signal
+[VLA Process] Cleaned up and exiting
+All services shut down successfully
